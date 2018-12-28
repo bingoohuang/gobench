@@ -124,7 +124,7 @@
               <connectTime>true</connectTime>
             </value>
           </objProp>
-          <stringProp name="filename"></stringProp>
+          <stringProp name="filename">/Users/bingoo/GitHub/http-upload-benchmark/scripts/log.jtl</stringProp>
         </ResultCollector>
         <hashTree/>
       </hashTree>
