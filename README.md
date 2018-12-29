@@ -51,42 +51,41 @@ It is a HTTP/HTTPS load testing and benchmarking tool supporting http uploading 
 
 Originated from [gobench](https://github.com/cmpxchg16/gobench). 
 
+    bingoo@localhost ~/G/h/gobench> ./gobench -up http://127.0.0.1:8811/upload  -c 100 -p /tmp/fix5242880  -r 1000
+    Dispatching 100 clients
+    Waiting for results...
 
+    Requests:                           100000 hits
+    Successful requests:                 99651 hits
+    Network failed:                        349 hits
+    Bad requests failed (!2xx):              0 hits
+    Successful requests rate:              153 hits/sec
+    Read throughput:                     11498 bytes/sec
+    Write throughput:                803968443 bytes/sec
+    Test time:                             650 sec
 
-> bingoo@localhost ~/G/h/gobench> ./gobench -up http://127.0.0.1:8811/upload  -c 100 -p /tmp/fix5242880  -r 1000
-> Dispatching 100 clients
-> Waiting for results...
-> 
-> Requests:                           100000 hits
-> Successful requests:                 99651 hits
-> Network failed:                        349 hits
-> Bad requests failed (!2xx):              0 hits
-> Successful requests rate:              153 hits/sec
-> Read throughput:                     11498 bytes/sec
-> Write throughput:                803968443 bytes/sec
-> Test time:                             650 sec
+gobench usage:
 
-
-> bingoo@localhost ~/G/h/gobench> ./gobench
-> Usage of ./gobench:
->   -auth string
->     	Authorization header
->   -c int
->     	Number of concurrent clients (default 100)
->   -d string
->     	HTTP POST data file path
->   -f string
->     	URL's file path (line seperated)
->   -k	Do HTTP keep-alive (default true)
->   -r int
->     	Number of requests per client (default -1)
->   -t int
->     	Period of time (in seconds) (default -1)
->   -tr int
->     	Read timeout (in milliseconds) (default 5000)
->   -tw int
->     	Write timeout (in milliseconds) (default 5000)
->   -u string
->     	URL
->   -up string
->     	HTTP upload file path
+    bingoo@localhost ~/G/h/gobench> ./gobench
+    Usage of ./gobench:
+      -auth string
+          Authorization header
+      -c int
+          Number of concurrent clients (default 100)
+      -d string
+          HTTP POST data file path
+      -f string
+          URL's file path (line seperated)
+      -k	Do HTTP keep-alive (default true)
+      -r int
+          Number of requests per client (default -1)
+      -t int
+          Period of time (in seconds) (default -1)
+      -tr int
+          Read timeout (in milliseconds) (default 5000)
+      -tw int
+          Write timeout (in milliseconds) (default 5000)
+      -u string
+          URL
+      -up string
+          HTTP upload file path
