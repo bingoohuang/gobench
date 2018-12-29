@@ -8,7 +8,7 @@ import (
 )
 
 func NetHttpUpload(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseMultipartForm(10240)
+	_ = r.ParseMultipartForm(16 << 20) // 16 MiB
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		fmt.Println(err)
