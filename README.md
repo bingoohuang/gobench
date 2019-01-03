@@ -44,14 +44,15 @@ Environment:
 | 总体     | 20000     | 127     | 122    | 183      | 205      | 251      | 17  | 400 | 0.000%  | 154.58101  | 14.04           | 791524.64   | 
 
 
-3. spring-boot upload with temporary store (5 mib random context file).
+3.1. spring-boot upload with temporary store (5 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
 | HTTP请求 | 20000     | 476     | 477    | 530      | 553      | 611      | 65  | 768 | 0.000%  | 41.83085   | 4.70            | 214192.88   | 
 | 总体     | 20000     | 476     | 477    | 530      | 553      | 611      | 65  | 768 | 0.000%  | 41.83085   | 4.70            | 214192.88   | 
 
-3. pring-boot upload with temporary store (2 mib random context file).
+
+3.2. pring-boot upload with temporary store (2 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
@@ -59,7 +60,7 @@ Environment:
 | 总体     | 20000     | 185     | 186    | 208      | 215      | 236      | 18  | 342 | 0.000%  | 107.12201  | 12.03           | 219434.30   | 
 
 
-4. spring-boot upload without temporary store (5 mib random context file).
+4.1. spring-boot upload without temporary store (5 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
@@ -67,7 +68,7 @@ Environment:
 | 总体     | 20000     | 151     | 132    | 279      | 369      | 456      | 20  | 753 | 0.000%  | 130.06184  | 14.61           | 665975.44   | 
 
 
-4. spring-boot upload without temporary store (2 mib random context file).
+4.2. spring-boot upload without temporary store (2 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
