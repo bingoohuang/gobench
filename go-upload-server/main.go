@@ -11,12 +11,16 @@ var (
 	impl           string
 	sampleFileSize int64
 	port           string
+	child          bool
+	fork           bool
 )
 
 func init() {
 	flag.StringVar(&port, "port", "8811", "listen port")
 	flag.StringVar(&impl, "impl", "", "implementation: nethttp/fasthttp")
 	flag.Int64Var(&sampleFileSize, "sampleFileSize", 0, "create sampling file with specified size and exit")
+	flag.BoolVar(&fork, "fork", false, "fork children processes when --imp=fasthttp")
+	flag.BoolVar(&child, "child", false, "flag child process when --imp=fasthttp (CAUTION: only used internally by program)")
 
 	flag.Parse()
 }
@@ -45,7 +49,12 @@ func main() {
 			MaxRequestBodySize: 10 << 20, // 10 MiB
 		}
 
-		_ = s.ListenAndServe(":" + port)
+		if fork {
+			ln := createForkListener(":" + port)
+			_ = s.Serve(ln)
+		} else {
+			_ = s.ListenAndServe(":" + port)
+		}
 	default:
 		fmt.Println("go upload server")
 		flag.PrintDefaults()
