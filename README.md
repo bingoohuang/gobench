@@ -29,14 +29,14 @@ Environment:
 >>        Memory: 16 GB
 
 
-1. net/http with 5 mib random context file upload without temp file.
+1. net/http upload without temp file (5 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
 | HTTP请求 | 20000     | 115     | 107    | 175      | 202      | 264      | 14  | 887 | 0.000%  | 171.53983  | 12.56           | 878361.45   | 
 | 总体     | 20000     | 115     | 107    | 175      | 202      | 264      | 14  | 887 | 0.000%  | 171.53983  | 12.56           | 878361.45   | 
 
-2. fasthttp with 5 mib random context file upload without temp file.
+2. fasthttp upload without temp file (5 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
@@ -44,7 +44,7 @@ Environment:
 | 总体     | 20000     | 127     | 122    | 183      | 205      | 251      | 17  | 400 | 0.000%  | 154.58101  | 14.04           | 791524.64   | 
 
 
-3. spring-boot with temporary store.
+3. spring-boot upload with temporary store (5 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
@@ -52,7 +52,7 @@ Environment:
 | 总体     | 20000     | 476     | 477    | 530      | 553      | 611      | 65  | 768 | 0.000%  | 41.83085   | 4.70            | 214192.88   | 
 
 
-4. spring-boot without temporary store.
+4. spring-boot upload without temporary store (5 mib random context file).
 
 | Label  | # Samples | Average | Median | 90% Line | 95% Line | 99% Line | Min | Max | Error % | Throughput | Received KB/sec | Sent KB/sec | 
 |--------|-----------|---------|--------|----------|----------|----------|-----|-----|---------|------------|-----------------|-------------| 
