@@ -12,3 +12,5 @@
 *.out
 .idea
 *.bin
+
+spring-boot-upload-server/target
