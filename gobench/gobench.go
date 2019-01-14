@@ -5,15 +5,18 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/bingoohuang/golang-trial/randimg"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"mime/multipart"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,11 +33,13 @@ var (
 	keepAlive        bool
 	postDataFilePath string
 	uploadFilePath   string
+	uploddRandImg    bool
 	writeTimeout     int
 	readTimeout      int
 	authHeader       string
 )
 
+// Configuration for gobench
 type Configuration struct {
 	urls        []string
 	method      string
@@ -48,6 +53,7 @@ type Configuration struct {
 	myClient fasthttp.Client
 }
 
+// Result of gobench
 type Result struct {
 	requests      int64
 	success       int64
@@ -58,12 +64,14 @@ type Result struct {
 var readThroughput int64
 var writeThroughput int64
 
+// MyConn for net connection
 type MyConn struct {
 	net.Conn
 }
 
-func (this *MyConn) Read(b []byte) (n int, err error) {
-	len, err := this.Conn.Read(b)
+// Read bytes from net connection
+func (myConn *MyConn) Read(b []byte) (n int, err error) {
+	len, err := myConn.Conn.Read(b)
 
 	if err == nil {
 		atomic.AddInt64(&readThroughput, int64(len))
@@ -72,8 +80,9 @@ func (this *MyConn) Read(b []byte) (n int, err error) {
 	return len, err
 }
 
-func (this *MyConn) Write(b []byte) (n int, err error) {
-	len, err := this.Conn.Write(b)
+// Write bytes to net
+func (myConn *MyConn) Write(b []byte) (n int, err error) {
+	len, err := myConn.Conn.Write(b)
 
 	if err == nil {
 		atomic.AddInt64(&writeThroughput, int64(len))
@@ -88,6 +97,7 @@ func init() {
 	flag.StringVar(&url, "u", "", "URL")
 	flag.StringVar(&urlsFilePath, "f", "", "URL's file path (line seperated)")
 	flag.BoolVar(&keepAlive, "k", true, "Do HTTP keep-alive")
+	flag.BoolVar(&uploddRandImg, "r", false, "Upload random png images by file upload")
 	flag.StringVar(&postDataFilePath, "d", "", "HTTP POST data file path")
 	flag.StringVar(&uploadFilePath, "up", "", "HTTP upload file path")
 	flag.Int64Var(&period, "t", -1, "Period of time (in seconds)")
@@ -129,7 +139,6 @@ func printResults(results map[int]*Result, startTime time.Time) {
 }
 
 func readLines(path string) (lines []string, err error) {
-
 	var file *os.File
 	var part []byte
 	var prefix bool
@@ -157,8 +166,8 @@ func readLines(path string) (lines []string, err error) {
 	return
 }
 
+// NewConfiguration create Configuration
 func NewConfiguration() *Configuration {
-
 	if urlsFilePath == "" && url == "" {
 		flag.Usage()
 		os.Exit(1)
@@ -235,13 +244,11 @@ func NewConfiguration() *Configuration {
 
 	if uploadFilePath != "" {
 		configuration.method = "POST"
-		multipartFile, contentType, err := ReadUploadMultipartFile(uploadFilePath)
+		var err error
+		configuration.postData, configuration.contentType, err = ReadUploadMultipartFile(uploadFilePath)
 		if err != nil {
 			log.Fatalf("Error in ReadUploadMultipartFile for file path: %s Error: %v", uploadFilePath, err)
 		}
-
-		configuration.contentType = contentType
-		configuration.postData = multipartFile
 	}
 
 	configuration.myClient.ReadTimeout = time.Duration(readTimeout) * time.Millisecond
@@ -253,6 +260,7 @@ func NewConfiguration() *Configuration {
 	return configuration
 }
 
+// MyDialer create Dial function
 func MyDialer() func(address string) (conn net.Conn, err error) {
 	return func(address string) (net.Conn, error) {
 		conn, err := net.Dial("tcp", address)
@@ -261,12 +269,12 @@ func MyDialer() func(address string) (conn net.Conn, err error) {
 		}
 
 		myConn := &MyConn{Conn: conn}
-
 		return myConn, nil
 	}
 }
 
-func mustOpen(f string) *os.File {
+// MustOpen open file successfully or panic
+func MustOpen(f string) *os.File {
 	r, err := os.Open(f)
 	if err != nil {
 		panic(err)
@@ -274,7 +282,7 @@ func mustOpen(f string) *os.File {
 	return r
 }
 
-// Read file filePath for upload in multipart,
+// ReadUploadMultipartFile read file filePath for upload in multipart,
 // return multipart content, form data content type and error
 func ReadUploadMultipartFile(filePath string) ([]byte, string, error) {
 	var buffer bytes.Buffer
@@ -285,7 +293,7 @@ func ReadUploadMultipartFile(filePath string) ([]byte, string, error) {
 		return nil, "", err
 	}
 
-	file := mustOpen(filePath)
+	file := MustOpen(filePath)
 	defer file.Close()
 
 	io.Copy(part, file)
@@ -295,13 +303,28 @@ func ReadUploadMultipartFile(filePath string) ([]byte, string, error) {
 	return buffer.Bytes(), writer.FormDataContentType(), nil
 }
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+func randomImage() ([]byte, string, error) {
+	seq := randimg.RandUint64()
+	randText := strconv.FormatUint(seq, 10)
+	size := rand.Intn(4) + 1
+	imageFile := randText + ".png"
+	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size<<20)
+	defer os.Remove(imageFile)
+
+	return ReadUploadMultipartFile(imageFile)
+}
+
 func client(configuration *Configuration, result *Result, done *sync.WaitGroup) {
 	for result.requests < configuration.requests {
-		for _, tmpUrl := range configuration.urls {
+		for _, tmpURL := range configuration.urls {
 
 			req := fasthttp.AcquireRequest()
 
-			req.SetRequestURI(tmpUrl)
+			req.SetRequestURI(tmpURL)
 			req.Header.SetMethodBytes([]byte(configuration.method))
 
 			if configuration.keepAlive {
@@ -314,10 +337,13 @@ func client(configuration *Configuration, result *Result, done *sync.WaitGroup) 
 				req.Header.Set("Authorization", configuration.authHeader)
 			}
 
+			if uploddRandImg {
+				configuration.postData, configuration.contentType, _ = randomImage()
+			}
+
 			if configuration.contentType != "" {
 				req.Header.Set("Content-Type", configuration.contentType)
 			}
-
 			req.SetBody(configuration.postData)
 
 			resp := fasthttp.AcquireResponse()
