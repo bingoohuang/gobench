@@ -13,20 +13,20 @@ HTTP upload server benchmark in few languages/frameworks and gobench tool
 
 Environment:
 
->>  bingoo@bingodeMacBook-Pro ~> system_profiler SPHardwareDataType
->>  Hardware:
->>  
->>      Hardware Overview:
->>  
->>        Model Name: MacBook Pro
->>        Model Identifier: MacBookPro15,1
->>        Processor Name: Intel Core i7
->>        Processor Speed: 2.6 GHz
->>        Number of Processors: 1
->>        Total Number of Cores: 6
->>        L2 Cache (per Core): 256 KB
->>        L3 Cache: 9 MB
->>        Memory: 16 GB
+>  bingoo@bingodeMacBook-Pro ~> system_profiler SPHardwareDataType
+>  Hardware:
+>  
+>      Hardware Overview:
+>  
+>        Model Name: MacBook Pro
+>        Model Identifier: MacBookPro15,1
+>        Processor Name: Intel Core i7
+>        Processor Speed: 2.6 GHz
+>        Number of Processors: 1
+>        Total Number of Cores: 6
+>        L2 Cache (per Core): 256 KB
+>        L3 Cache: 9 MB
+>        Memory: 16 GB
 
 
 1. net/http upload without temp file (5 mib random context file).
