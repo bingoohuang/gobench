@@ -327,7 +327,7 @@ func client(configuration *Configuration, result *Result, done *sync.WaitGroup) 
 	for requests < 0 || result.requests < requests {
 		if urlsRandRobin {
 			tmpURL := configuration.urls[urlIndex]
-			doRequest(configuration, result, done, tmpURL)
+			doRequest(configuration, result, tmpURL)
 
 			urlIndex++
 			if urlIndex >= len(configuration.urls) {
@@ -335,7 +335,7 @@ func client(configuration *Configuration, result *Result, done *sync.WaitGroup) 
 			}
 		} else {
 			for _, tmpURL := range configuration.urls {
-				doRequest(configuration, result, done, tmpURL)
+				doRequest(configuration, result, tmpURL)
 			}
 		}
 	}
@@ -343,7 +343,7 @@ func client(configuration *Configuration, result *Result, done *sync.WaitGroup) 
 	done.Done()
 }
 
-func doRequest(configuration *Configuration, result *Result, done *sync.WaitGroup, tmpURL string) {
+func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 	req := fasthttp.AcquireRequest()
 
 	method := configuration.method
@@ -357,17 +357,10 @@ func doRequest(configuration *Configuration, result *Result, done *sync.WaitGrou
 
 	req.SetRequestURI(tmpURL)
 	req.Header.SetMethodBytes([]byte(method))
-
-	if configuration.keepAlive {
-		req.Header.Set("Connection", "keep-alive")
-	} else {
-		req.Header.Set("Connection", "close")
-	}
-
+	req.Header.Set("Connection", IfElse(configuration.keepAlive, "keep-alive", "close"))
 	if len(configuration.authHeader) > 0 {
 		req.Header.Set("Authorization", configuration.authHeader)
 	}
-
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -435,4 +428,12 @@ func HandleMaxProcs() {
 	if goMaxProcs == "" {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
+}
+
+func IfElse(condition bool, then, els string) string {
+	if condition {
+		return then
+	}
+
+	return els
 }
