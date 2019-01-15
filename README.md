@@ -99,24 +99,30 @@ gobench usage:
 
     bingoo@localhost ~/G/h/gobench> ./gobench
     Usage of ./gobench:
-      -auth string
-          Authorization header
-      -c int
-          Number of concurrent clients (default 100)
-      -d string
-          HTTP POST data file path
-      -f string
-          URL's file path (line seperated)
-      -k	Do HTTP keep-alive (default true)
-      -r int
-          Number of requests per client (default -1)
-      -t int
-          Period of time (in seconds) (default -1)
-      -tr int
-          Read timeout (in milliseconds) (default 5000)
-      -tw int
-          Write timeout (in milliseconds) (default 5000)
-      -u string
-          URL
-      -up string
-          HTTP upload file path
+    -auth string
+            Authorization header
+    -c int
+            Number of concurrent clients (default 100)
+    -d string
+            HTTP POST data file path
+    -fn string
+            Upload file name (default "file")
+    -fp string
+            HTTP upload file path
+    -fr
+            Upload random png images by file upload
+    -k	Do HTTP keep-alive (default true)
+    -r int
+            Number of requests per client (default -1)
+    -t int
+            Period of time (in seconds) (default -1)
+    -tr int
+            Read timeout (in milliseconds) (default 5000)
+    -tw int
+            Write timeout (in milliseconds) (default 5000)
+    -u string
+            URL list (comma seperated)
+    -uf string
+            URL's file path (line seperated)
+    -ur
+            select url in Rand-Robin  (default true)

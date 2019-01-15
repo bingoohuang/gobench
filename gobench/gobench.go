@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/bingoohuang/golang-trial/randimg"
 	"io"
 	"io/ioutil"
 	"log"
@@ -17,9 +16,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/bingoohuang/golang-trial/randimg"
 
 	"github.com/valyala/fasthttp"
 )
@@ -28,7 +30,7 @@ var (
 	requests         int64
 	period           int64
 	clients          int
-	url              string
+	urls             string
 	urlsFilePath     string
 	keepAlive        bool
 	postDataFilePath string
@@ -37,6 +39,8 @@ var (
 	writeTimeout     int
 	readTimeout      int
 	authHeader       string
+	uploadFileName   string
+	urlsRandRobin    bool
 )
 
 // Configuration for gobench
@@ -94,16 +98,18 @@ func (myConn *MyConn) Write(b []byte) (n int, err error) {
 func init() {
 	flag.Int64Var(&requests, "r", -1, "Number of requests per client")
 	flag.IntVar(&clients, "c", 100, "Number of concurrent clients")
-	flag.StringVar(&url, "u", "", "URL")
-	flag.StringVar(&urlsFilePath, "f", "", "URL's file path (line seperated)")
+	flag.StringVar(&urls, "u", "", "URL list (comma seperated)")
+	flag.StringVar(&urlsFilePath, "uf", "", "URL's file path (line seperated)")
+	flag.BoolVar(&urlsRandRobin, "ur", true, "select url in Rand-Robin ")
 	flag.BoolVar(&keepAlive, "k", true, "Do HTTP keep-alive")
-	flag.BoolVar(&uploddRandImg, "r", false, "Upload random png images by file upload")
+	flag.BoolVar(&uploddRandImg, "fr", false, "Upload random png images by file upload")
 	flag.StringVar(&postDataFilePath, "d", "", "HTTP POST data file path")
-	flag.StringVar(&uploadFilePath, "up", "", "HTTP upload file path")
+	flag.StringVar(&uploadFilePath, "fp", "", "HTTP upload file path")
 	flag.Int64Var(&period, "t", -1, "Period of time (in seconds)")
 	flag.IntVar(&writeTimeout, "tw", 5000, "Write timeout (in milliseconds)")
 	flag.IntVar(&readTimeout, "tr", 5000, "Read timeout (in milliseconds)")
 	flag.StringVar(&authHeader, "auth", "", "Authorization header")
+	flag.StringVar(&uploadFileName, "fn", "file", "Upload file name")
 
 	flag.Parse()
 }
@@ -168,7 +174,7 @@ func readLines(path string) (lines []string, err error) {
 
 // NewConfiguration create Configuration
 func NewConfiguration() *Configuration {
-	if urlsFilePath == "" && url == "" {
+	if urlsFilePath == "" && urls == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -190,7 +196,7 @@ func NewConfiguration() *Configuration {
 		method:     "GET",
 		postData:   nil,
 		keepAlive:  keepAlive,
-		requests:   int64((1 << 63) - 1),
+		requests:   requests,
 		authHeader: authHeader}
 
 	if period != -1 {
@@ -214,10 +220,6 @@ func NewConfiguration() *Configuration {
 		}()
 	}
 
-	if requests != -1 {
-		configuration.requests = requests
-	}
-
 	if urlsFilePath != "" {
 		fileLines, err := readLines(urlsFilePath)
 
@@ -228,8 +230,9 @@ func NewConfiguration() *Configuration {
 		configuration.urls = fileLines
 	}
 
-	if url != "" {
-		configuration.urls = append(configuration.urls, url)
+	if urls != "" {
+		parts := strings.Split(urls, ",")
+		configuration.urls = append(configuration.urls, parts...)
 	}
 
 	if postDataFilePath != "" {
@@ -245,7 +248,7 @@ func NewConfiguration() *Configuration {
 	if uploadFilePath != "" {
 		configuration.method = "POST"
 		var err error
-		configuration.postData, configuration.contentType, err = ReadUploadMultipartFile(uploadFilePath)
+		configuration.postData, configuration.contentType, err = ReadUploadMultipartFile(uploadFileName, uploadFilePath)
 		if err != nil {
 			log.Fatalf("Error in ReadUploadMultipartFile for file path: %s Error: %v", uploadFilePath, err)
 		}
@@ -284,11 +287,11 @@ func MustOpen(f string) *os.File {
 
 // ReadUploadMultipartFile read file filePath for upload in multipart,
 // return multipart content, form data content type and error
-func ReadUploadMultipartFile(filePath string) ([]byte, string, error) {
+func ReadUploadMultipartFile(filename, filePath string) ([]byte, string, error) {
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	part, err := writer.CreateFormFile(filename, filepath.Base(filePath))
 	if err != nil {
 		return nil, "", err
 	}
@@ -315,53 +318,24 @@ func randomImage() ([]byte, string, error) {
 	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size<<20)
 	defer os.Remove(imageFile)
 
-	return ReadUploadMultipartFile(imageFile)
+	return ReadUploadMultipartFile(uploadFileName, imageFile)
 }
 
 func client(configuration *Configuration, result *Result, done *sync.WaitGroup) {
-	for result.requests < configuration.requests {
-		for _, tmpURL := range configuration.urls {
+	urlIndex := rand.Intn(len(configuration.urls))
+	requests := configuration.requests
+	for requests < 0 || result.requests < requests {
+		if urlsRandRobin {
+			tmpURL := configuration.urls[urlIndex]
+			doRequest(configuration, result, done, tmpURL)
 
-			req := fasthttp.AcquireRequest()
-
-			req.SetRequestURI(tmpURL)
-			req.Header.SetMethodBytes([]byte(configuration.method))
-
-			if configuration.keepAlive {
-				req.Header.Set("Connection", "keep-alive")
-			} else {
-				req.Header.Set("Connection", "close")
+			urlIndex++
+			if urlIndex >= len(configuration.urls) {
+				urlIndex = 0
 			}
-
-			if len(configuration.authHeader) > 0 {
-				req.Header.Set("Authorization", configuration.authHeader)
-			}
-
-			if uploddRandImg {
-				configuration.postData, configuration.contentType, _ = randomImage()
-			}
-
-			if configuration.contentType != "" {
-				req.Header.Set("Content-Type", configuration.contentType)
-			}
-			req.SetBody(configuration.postData)
-
-			resp := fasthttp.AcquireResponse()
-			err := configuration.myClient.Do(req, resp)
-			statusCode := resp.StatusCode()
-			result.requests++
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
-
-			if err != nil {
-				result.networkFailed++
-				continue
-			}
-
-			if statusCode == fasthttp.StatusOK {
-				result.success++
-			} else {
-				result.badFailed++
+		} else {
+			for _, tmpURL := range configuration.urls {
+				doRequest(configuration, result, done, tmpURL)
 			}
 		}
 	}
@@ -369,41 +343,96 @@ func client(configuration *Configuration, result *Result, done *sync.WaitGroup) 
 	done.Done()
 }
 
+func doRequest(configuration *Configuration, result *Result, done *sync.WaitGroup, tmpURL string) {
+	req := fasthttp.AcquireRequest()
+
+	method := configuration.method
+	postData := configuration.postData
+	contentType := configuration.contentType
+
+	if uploddRandImg {
+		method = "POST"
+		postData, contentType, _ = randomImage()
+	}
+
+	req.SetRequestURI(tmpURL)
+	req.Header.SetMethodBytes([]byte(method))
+
+	if configuration.keepAlive {
+		req.Header.Set("Connection", "keep-alive")
+	} else {
+		req.Header.Set("Connection", "close")
+	}
+
+	if len(configuration.authHeader) > 0 {
+		req.Header.Set("Authorization", configuration.authHeader)
+	}
+
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	req.SetBody(postData)
+
+	resp := fasthttp.AcquireResponse()
+	err := configuration.myClient.Do(req, resp)
+	statusCode := resp.StatusCode()
+	result.requests++
+	fasthttp.ReleaseRequest(req)
+	fasthttp.ReleaseResponse(resp)
+
+	if err != nil {
+		result.networkFailed++
+		return
+	}
+
+	if statusCode == fasthttp.StatusOK || statusCode == fasthttp.StatusCreated {
+		result.success++
+	} else {
+		result.badFailed++
+	}
+}
+
 func main() {
 	startTime := time.Now()
-	var done sync.WaitGroup
 	results := make(map[int]*Result)
 
-	// handle ctrl+c to quit
-	handleCtrlC(results, startTime)
-
-	goMaxProcs := os.Getenv("GOMAXPROCS")
-	if goMaxProcs == "" {
-		runtime.GOMAXPROCS(runtime.NumCPU())
-	}
+	HandleCtrlC(func() {
+		printResults(results, startTime)
+	})
+	HandleMaxProcs()
 
 	configuration := NewConfiguration()
 
 	fmt.Printf("Dispatching %d clients\n", clients)
 
+	var done sync.WaitGroup
 	done.Add(clients)
 	for i := 0; i < clients; i++ {
 		result := &Result{}
 		results[i] = result
 		go client(configuration, result, &done)
-
 	}
+
 	fmt.Println("Waiting for results...")
 	done.Wait()
 	printResults(results, startTime)
 }
 
-func handleCtrlC(results map[int]*Result, startTime time.Time) {
+// HandleCtrlC handles Ctrl+C to exit after calling f.
+func HandleCtrlC(f func()) {
 	signalChannel := make(chan os.Signal, 2)
 	signal.Notify(signalChannel, os.Interrupt)
 	go func() {
 		_ = <-signalChannel
-		printResults(results, startTime)
+		f()
 		os.Exit(0)
 	}()
+}
+
+// HandleMaxProcs process GOMAXPROCS.
+func HandleMaxProcs() {
+	goMaxProcs := os.Getenv("GOMAXPROCS")
+	if goMaxProcs == "" {
+		runtime.GOMAXPROCS(runtime.NumCPU())
+	}
 }
