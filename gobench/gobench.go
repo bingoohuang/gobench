@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -239,6 +240,8 @@ func randomImage() ([]byte, string, error) {
 	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size<<20)
 	defer os.Remove(imageFile)
 
+	log.Println("create random image", imageFile, "in size", size, "MiB")
+
 	return ReadUploadMultipartFile(uploadFileName, imageFile)
 }
 
@@ -295,10 +298,11 @@ func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 
 	if err != nil {
 		result.networkFailed++
-	} else if statusCode == fasthttp.StatusOK || statusCode == fasthttp.StatusCreated {
-		result.success++
-	} else {
+	} else if statusCode < http.StatusOK || statusCode > http.StatusIMUsed {
 		result.badFailed++
+		fmt.Println("failed", statusCode, string(resp.Body()))
+	} else {
+		result.success++
 	}
 }
 
@@ -363,6 +367,7 @@ func HandleMaxProcs() {
 	}
 }
 
+// IfElse return then if condition is true,  else els if false
 func IfElse(condition bool, then, els string) string {
 	if condition {
 		return then
