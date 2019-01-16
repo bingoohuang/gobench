@@ -43,6 +43,7 @@ var (
 	authHeader       string
 	uploadFileName   string
 	urlsRandRobin    bool
+	exitRequested    bool
 )
 
 // Configuration for gobench
@@ -80,7 +81,7 @@ func init() {
 	flag.Int64Var(&period, "t", -1, "Period of time (in seconds)")
 	flag.IntVar(&writeTimeout, "tw", 5000, "Write timeout (in milliseconds)")
 	flag.IntVar(&readTimeout, "tr", 5000, "Read timeout (in milliseconds)")
-	flag.StringVar(&authHeader, "auth", "", "Authorization header")
+	flag.StringVar(&authHeader, "a", "", "Authorization header")
 	flag.StringVar(&uploadFileName, "fn", "file", "Upload file name")
 
 	flag.Parse()
@@ -92,9 +93,9 @@ func main() {
 	startTime := time.Now()
 	results := make(map[int]*Result)
 
-	HandleCtrlC(func() {
-		printResults(results, startTime)
-	})
+	HandleInterrupt(func() {
+		exitRequested = true
+	}, false)
 	HandleMaxProcs()
 
 	configuration, err := NewConfiguration()
@@ -233,8 +234,7 @@ func NewConfiguration() (*Configuration, error) {
 }
 
 func randomImage() ([]byte, string, error) {
-	seq := randimg.RandUint64()
-	randText := strconv.FormatUint(seq, 10)
+	randText := strconv.FormatUint(randimg.RandUint64(), 10)
 	size := rand.Intn(4) + 1
 	imageFile := randText + ".png"
 	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size<<20)
@@ -248,13 +248,12 @@ func randomImage() ([]byte, string, error) {
 func client(configuration *Configuration, result *Result, done *sync.WaitGroup) {
 	urlIndex := rand.Intn(len(configuration.urls))
 	requests := configuration.requests
-	for requests < 0 || result.requests < requests {
+	for !exitRequested && (requests < 0 || result.requests < requests) {
 		if urlsRandRobin {
 			tmpURL := configuration.urls[urlIndex]
 			doRequest(configuration, result, tmpURL)
 
-			urlIndex++
-			if urlIndex >= len(configuration.urls) {
+			if urlIndex++; urlIndex >= len(configuration.urls) {
 				urlIndex = 0
 			}
 		} else {
@@ -280,13 +279,9 @@ func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI(tmpURL)
 	req.Header.SetMethodBytes([]byte(method))
-	req.Header.Set("Connection", IfElse(configuration.keepAlive, "keep-alive", "close"))
-	if len(configuration.authHeader) > 0 {
-		req.Header.Set("Authorization", configuration.authHeader)
-	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
+	SetHeaderIfNotEmpty(req, "Connection", IfElse(configuration.keepAlive, "keep-alive", "close"))
+	SetHeaderIfNotEmpty(req, "Authorization", configuration.authHeader)
+	SetHeaderIfNotEmpty(req, "Content-Type", contentType)
 	req.SetBody(postData)
 
 	resp := fasthttp.AcquireResponse()
@@ -306,6 +301,13 @@ func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 	}
 }
 
+// SetHeaderIfNotEmpty set request header if value is not empty.
+func SetHeaderIfNotEmpty(request *fasthttp.Request, header, value string) {
+	if value != "" {
+		request.Header.Set(header, value)
+	}
+}
+
 var readThroughput int64
 var writeThroughput int64
 
@@ -317,7 +319,6 @@ type MyConn struct {
 // Read bytes from net connection
 func (myConn *MyConn) Read(b []byte) (n int, err error) {
 	len, err := myConn.Conn.Read(b)
-
 	if err == nil {
 		atomic.AddInt64(&readThroughput, int64(len))
 	}
@@ -328,7 +329,6 @@ func (myConn *MyConn) Read(b []byte) (n int, err error) {
 // Write bytes to net
 func (myConn *MyConn) Write(b []byte) (n int, err error) {
 	len, err := myConn.Conn.Write(b)
-
 	if err == nil {
 		atomic.AddInt64(&writeThroughput, int64(len))
 	}
@@ -348,14 +348,16 @@ func MyDialer() func(address string) (conn net.Conn, err error) {
 	}
 }
 
-// HandleCtrlC handles Ctrl+C to exit after calling f.
-func HandleCtrlC(f func()) {
-	signalChannel := make(chan os.Signal, 2)
-	signal.Notify(signalChannel, os.Interrupt)
+// HandleInterrupt handles Ctrl+C to exit after calling f.
+func HandleInterrupt(f func(), exitRightNow bool) {
+	ch := make(chan os.Signal, 2)
+	signal.Notify(ch, os.Interrupt)
 	go func() {
-		_ = <-signalChannel
+		_ = <-ch
 		f()
-		os.Exit(0)
+		if exitRightNow {
+			os.Exit(0)
+		}
 	}()
 }
 
@@ -380,7 +382,7 @@ func IfElse(condition bool, then, els string) string {
 func FileToLines(filePath string) (lines []string, err error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return
+		return nil, err
 	}
 	defer f.Close()
 
@@ -388,8 +390,7 @@ func FileToLines(filePath string) (lines []string, err error) {
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-	err = scanner.Err()
-	return
+	return lines, scanner.Err()
 }
 
 // MustOpen open file successfully or panic
@@ -416,8 +417,6 @@ func ReadUploadMultipartFile(filename, filePath string) ([]byte, string, error) 
 	defer file.Close()
 
 	io.Copy(part, file)
-
 	writer.Close()
-
 	return buffer.Bytes(), writer.FormDataContentType(), nil
 }
