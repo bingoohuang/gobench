@@ -37,7 +37,7 @@ var (
 	keepAlive        bool
 	postDataFilePath string
 	uploadFilePath   string
-	uploddRandImg    bool
+	uploadRandImg    bool
 	writeTimeout     int
 	readTimeout      int
 	authHeader       string
@@ -75,7 +75,7 @@ func init() {
 	flag.StringVar(&urlsFilePath, "uf", "", "URL's file path (line seperated)")
 	flag.BoolVar(&urlsRandRobin, "ur", true, "select url in Rand-Robin ")
 	flag.BoolVar(&keepAlive, "k", true, "Do HTTP keep-alive")
-	flag.BoolVar(&uploddRandImg, "fr", false, "Upload random png images by file upload")
+	flag.BoolVar(&uploadRandImg, "fr", false, "Upload random png images by file upload")
 	flag.StringVar(&postDataFilePath, "d", "", "HTTP POST data file path")
 	flag.StringVar(&uploadFilePath, "fp", "", "HTTP upload file path")
 	flag.Int64Var(&period, "t", -1, "Period of time (in seconds)")
@@ -150,7 +150,7 @@ func printResults(results map[int]*Result, startTime time.Time) {
 }
 
 // NewConfiguration create Configuration
-func NewConfiguration() (*Configuration, error) {
+func NewConfiguration() (configuration *Configuration, err error) {
 	if urlsFilePath == "" && urls == "" {
 		return nil, errors.New("urls or urlsFilePath must be provided")
 	}
@@ -161,7 +161,7 @@ func NewConfiguration() (*Configuration, error) {
 		return nil, errors.New("only one should be provided: [requests|period]")
 	}
 
-	configuration := &Configuration{
+	configuration = &Configuration{
 		urls:       make([]string, 0),
 		method:     "GET",
 		postData:   nil,
@@ -192,13 +192,11 @@ func NewConfiguration() (*Configuration, error) {
 	}
 
 	if urlsFilePath != "" {
-		fileLines, err := FileToLines(urlsFilePath)
+		configuration.urls, err = FileToLines(urlsFilePath)
 
 		if err != nil {
 			log.Fatalf("Error in ioutil.ReadFile for file: %s Error: %v", urlsFilePath, err)
 		}
-
-		configuration.urls = fileLines
 	}
 
 	if urls != "" {
@@ -208,17 +206,14 @@ func NewConfiguration() (*Configuration, error) {
 
 	if postDataFilePath != "" {
 		configuration.method = "POST"
-		data, err := ioutil.ReadFile(postDataFilePath)
+		configuration.postData, err = ioutil.ReadFile(postDataFilePath)
 		if err != nil {
 			log.Fatalf("Error in ioutil.ReadFile for file path: %s Error: %v", postDataFilePath, err)
 		}
-
-		configuration.postData = data
 	}
 
 	if uploadFilePath != "" {
 		configuration.method = "POST"
-		var err error
 		configuration.postData, configuration.contentType, err = ReadUploadMultipartFile(uploadFileName, uploadFilePath)
 		if err != nil {
 			log.Fatalf("Error in ReadUploadMultipartFile for file path: %s Error: %v", uploadFilePath, err)
@@ -229,8 +224,7 @@ func NewConfiguration() (*Configuration, error) {
 	configuration.myClient.WriteTimeout = time.Duration(writeTimeout) * time.Millisecond
 	configuration.myClient.MaxConnsPerHost = clients
 	configuration.myClient.Dial = MyDialer()
-
-	return configuration, nil
+	return
 }
 
 func randomImage() ([]byte, string, error) {
@@ -271,7 +265,7 @@ func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 	postData := configuration.postData
 	contentType := configuration.contentType
 
-	if uploddRandImg {
+	if uploadRandImg {
 		method = "POST"
 		postData, contentType, _ = randomImage()
 	}
@@ -318,22 +312,21 @@ type MyConn struct {
 
 // Read bytes from net connection
 func (myConn *MyConn) Read(b []byte) (n int, err error) {
-	len, err := myConn.Conn.Read(b)
+	n, err = myConn.Conn.Read(b)
 	if err == nil {
-		atomic.AddInt64(&readThroughput, int64(len))
+		atomic.AddInt64(&readThroughput, int64(n))
 	}
 
-	return len, err
+	return
 }
 
 // Write bytes to net
 func (myConn *MyConn) Write(b []byte) (n int, err error) {
-	len, err := myConn.Conn.Write(b)
+	n, err = myConn.Conn.Write(b)
 	if err == nil {
-		atomic.AddInt64(&writeThroughput, int64(len))
+		atomic.AddInt64(&writeThroughput, int64(n))
 	}
-
-	return len, err
+	return
 }
 
 // MyDialer create Dial function
