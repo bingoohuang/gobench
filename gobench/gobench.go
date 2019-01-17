@@ -272,7 +272,7 @@ func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI(tmpURL)
-	req.Header.SetMethodBytes([]byte(method))
+	req.Header.SetMethod(method)
 	SetHeaderIfNotEmpty(req, "Connection", IfElse(configuration.keepAlive, "keep-alive", "close"))
 	SetHeaderIfNotEmpty(req, "Authorization", configuration.authHeader)
 	SetHeaderIfNotEmpty(req, "Content-Type", contentType)
