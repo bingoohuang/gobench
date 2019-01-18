@@ -229,7 +229,7 @@ func NewConfiguration() (configuration *Configuration, err error) {
 
 func randomImage() ([]byte, string, error) {
 	randText := strconv.FormatUint(randimg.RandUint64(), 10)
-	size := rand.Intn(4) + 1
+	size := rand.Int63n(4) + 1
 	imageFile := randText + ".png"
 	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size<<20)
 	defer os.Remove(imageFile)
