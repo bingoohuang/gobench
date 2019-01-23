@@ -7,5 +7,9 @@ func main() {
 		_, _ = w.Write([]byte("OK"))
 	})
 
+	http.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "my own error message", http.StatusInternalServerError)
+	})
+
 	_ = http.ListenAndServe(":8812", nil)
 }

@@ -44,6 +44,8 @@ var (
 	uploadFileName   string
 	urlsRandRobin    bool
 	exitRequested    bool
+
+	printSuccess bool
 )
 
 // Configuration for gobench
@@ -71,10 +73,11 @@ type Result struct {
 func init() {
 	flag.Int64Var(&requests, "r", -1, "Number of requests per client")
 	flag.IntVar(&clients, "c", 100, "Number of concurrent clients")
-	flag.StringVar(&urls, "u", "", "URL list (comma seperated)")
-	flag.StringVar(&urlsFilePath, "uf", "", "URL's file path (line seperated)")
+	flag.StringVar(&urls, "u", "", "URL list (comma separated)")
+	flag.StringVar(&urlsFilePath, "uf", "", "URL's file path (line separated)")
 	flag.BoolVar(&urlsRandRobin, "ur", true, "select url in Rand-Robin ")
 	flag.BoolVar(&keepAlive, "k", true, "Do HTTP keep-alive")
+	flag.BoolVar(&printSuccess, "ps", true, "Print when http request successfully")
 	flag.BoolVar(&uploadRandImg, "fr", false, "Upload random png images by file upload")
 	flag.StringVar(&postDataFilePath, "d", "", "HTTP POST data file path")
 	flag.StringVar(&uploadFilePath, "fp", "", "HTTP upload file path")
@@ -227,16 +230,17 @@ func NewConfiguration() (configuration *Configuration, err error) {
 	return
 }
 
-func randomImage() ([]byte, string, error) {
+func randomImage() (imageBytes []byte, contentType, imageFile string, err error) {
 	randText := strconv.FormatUint(randimg.RandUint64(), 10)
 	size := rand.Int63n(4) + 1
-	imageFile := randText + ".png"
+	imageFile = randText + ".png"
 	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size<<20)
 	defer os.Remove(imageFile)
 
 	log.Println("create random image", imageFile, "in size", size, "MiB")
 
-	return ReadUploadMultipartFile(uploadFileName, imageFile)
+	imageBytes, contentType, err = ReadUploadMultipartFile(uploadFileName, imageFile)
+	return
 }
 
 func client(configuration *Configuration, result *Result, done *sync.WaitGroup) {
@@ -264,10 +268,11 @@ func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 	method := configuration.method
 	postData := configuration.postData
 	contentType := configuration.contentType
+	fileName := ""
 
 	if uploadRandImg {
 		method = "POST"
-		postData, contentType, _ = randomImage()
+		postData, contentType, fileName, _ = randomImage()
 	}
 
 	req := fasthttp.AcquireRequest()
@@ -282,17 +287,20 @@ func doRequest(configuration *Configuration, result *Result, tmpURL string) {
 	err := configuration.myClient.Do(req, resp)
 	statusCode := resp.StatusCode()
 	result.requests++
-	fasthttp.ReleaseRequest(req)
-	fasthttp.ReleaseResponse(resp)
 
 	if err != nil {
 		result.networkFailed++
+		fmt.Fprintln(os.Stderr, "networkFailed", err.Error())
 	} else if statusCode < http.StatusOK || statusCode > http.StatusIMUsed {
 		result.badFailed++
-		fmt.Println("failed", statusCode, string(resp.Body()))
+		fmt.Fprintln(os.Stderr, "fileName", fileName, "failed", statusCode, string(resp.Body()))
 	} else {
 		result.success++
+		fmt.Fprintln(os.Stderr, "fileName", fileName, "success", statusCode, string(resp.Body()))
 	}
+
+	fasthttp.ReleaseRequest(req)
+	fasthttp.ReleaseResponse(resp)
 }
 
 // SetHeaderIfNotEmpty set request header if value is not empty.
@@ -397,7 +405,7 @@ func MustOpen(f string) *os.File {
 
 // ReadUploadMultipartFile read file filePath for upload in multipart,
 // return multipart content, form data content type and error
-func ReadUploadMultipartFile(filename, filePath string) ([]byte, string, error) {
+func ReadUploadMultipartFile(filename, filePath string) (imageBytes []byte, contentType string, err error) {
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
