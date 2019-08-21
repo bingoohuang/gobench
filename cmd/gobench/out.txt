@@ -1,0 +1,11 @@
+Dispatching 12 clients
+Waiting for results...
+
+Requests:                          4768806 hits
+Successful requests:               4768806 hits
+Network failed:                          0 hits
+Bad requests failed (!2xx):              0 hits
+Successful requests rate:            39740 hits/sec
+Read throughput:                   6683878 bytes/sec
+Write throughput:                  3616344 bytes/sec
+Test time:                             120 sec
