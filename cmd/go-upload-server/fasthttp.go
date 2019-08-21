@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/reuseport"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"runtime"
+
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/reuseport"
 )
 
 func fasthttpUpload(ctx *fasthttp.RequestCtx) {

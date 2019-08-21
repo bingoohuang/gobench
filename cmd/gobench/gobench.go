@@ -56,7 +56,7 @@ type Configuration struct {
 	method      string
 	postData    []byte
 	requests    uint64
-	duraton     time.Duration
+	duration    time.Duration
 	keepAlive   bool
 	authHeader  string
 	contentType string
@@ -170,10 +170,10 @@ func NewConfiguration() (configuration *Configuration, err error) {
 	}
 
 	if requests == 0 && period == 0 {
-		return nil, errors.New("requests or duraton must be provided")
+		return nil, errors.New("requests or duration must be provided")
 	}
 	if requests != 0 && period != 0 {
-		return nil, errors.New("only one should be provided: [requests|duraton]")
+		return nil, errors.New("only one should be provided: [requests|duration]")
 	}
 
 	conectionChan = make(chan bool, connections)
@@ -191,7 +191,7 @@ func NewConfiguration() (configuration *Configuration, err error) {
 	}
 
 	if period != 0 {
-		configuration.duraton = period
+		configuration.duration = period
 
 		timeout := make(chan bool, 1)
 		go func() {
@@ -246,32 +246,24 @@ func NewConfiguration() (configuration *Configuration, err error) {
 	return
 }
 
-func randomImage() (imageBytes []byte, contentType, imageFile string, err error) {
-	randText := strconv.FormatUint(randimg.RandUint64(), 10)
-	size := rand.Int63n(4) + 1
-	imageFile = randText + ".png"
-	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size<<20)
-	defer os.Remove(imageFile)
-
-	log.Println("create random image", imageFile, "in size", size, "MiB")
-
-	imageBytes, contentType, err = ReadUploadMultipartFile(uploadFileName, imageFile)
-	return
-}
-
-func fixedImg() (imageBytes []byte, contentType, imageFile string, err error) {
-	randText := strconv.FormatUint(randimg.RandUint64(), 10)
-	imageFile = randText + ".png"
-	size, err := units.FromHumanSize(fixedImgSize)
-	if err != nil {
-		fmt.Println("error fixedImgSize " + err.Error())
-		panic(err)
+func randomImage(imageSize string) (imageBytes []byte, contentType, imageFile string, err error) {
+	var size int64
+	if imageSize == "" {
+		size = (rand.Int63n(4) + 1) << 20 //  << 20 means MiB
+	} else {
+		size, err = units.FromHumanSize(fixedImgSize)
+		if err != nil {
+			fmt.Println("error fixedImgSize " + err.Error())
+			panic(err)
+		}
 	}
 
+	randText := strconv.FormatUint(randimg.RandUint64(), 10)
+	imageFile = randText + ".png"
 	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size)
 	defer os.Remove(imageFile)
 
-	log.Println("create random image", imageFile, "in size", size, "MiB")
+	log.Println("create random image", imageFile, "in size", units.HumanSize(float64(size)))
 
 	imageBytes, contentType, err = ReadUploadMultipartFile(uploadFileName, imageFile)
 	return
@@ -298,12 +290,9 @@ func doRequest(configuration *Configuration, result *Result, url string) {
 	contentType := configuration.contentType
 	fileName := ""
 
-	if fixedImgSize != "" {
+	if uploadRandImg || fixedImgSize != "" {
 		method = "POST"
-		postData, contentType, fileName, _ = fixedImg()
-	} else if uploadRandImg {
-		method = "POST"
-		postData, contentType, fileName, _ = randomImage()
+		postData, contentType, fileName, _ = randomImage(fixedImgSize)
 	}
 
 	<-conectionChan
