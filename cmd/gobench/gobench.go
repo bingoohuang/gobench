@@ -23,9 +23,11 @@ import (
 	"time"
 
 	"github.com/bingoohuang/golang-trial/randimg"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 
 	"github.com/valyala/fasthttp"
+
+	"github.com/docker/go-units"
 )
 
 var (
@@ -43,6 +45,7 @@ var (
 	authHeader       string
 	uploadFileName   string
 	exitRequested    bool
+	fixedImgSize     string
 
 	printResult bool
 )
@@ -77,6 +80,7 @@ func init() {
 	flag.BoolVar(&keepAlive, "keepAlive", true, "Do HTTP keep-alive")
 	flag.BoolVar(&printResult, "v", false, "Print http request result")
 	flag.BoolVar(&uploadRandImg, "randomPng", false, "Upload random png images by file upload")
+	flag.StringVar(&fixedImgSize, "fixedImgSize", "", "Upload fixed img size (eg. 44kB, 17MB)")
 	flag.StringVar(&postDataFilePath, "postDataFile", "", "HTTP POST data file path")
 	flag.StringVar(&uploadFilePath, "f", "", "HTTP upload file path")
 	flag.StringVar(&duraton, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
@@ -255,6 +259,24 @@ func randomImage() (imageBytes []byte, contentType, imageFile string, err error)
 	return
 }
 
+func fixedImg() (imageBytes []byte, contentType, imageFile string, err error) {
+	randText := strconv.FormatUint(randimg.RandUint64(), 10)
+	imageFile = randText + ".png"
+	size, err := units.FromHumanSize(fixedImgSize)
+	if err != nil {
+		fmt.Println("error fixedImgSize " + err.Error())
+		panic(err)
+	}
+
+	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size)
+	defer os.Remove(imageFile)
+
+	log.Println("create random image", imageFile, "in size", size, "MiB")
+
+	imageBytes, contentType, err = ReadUploadMultipartFile(uploadFileName, imageFile)
+	return
+}
+
 func client(configuration *Configuration, result *Result, done *sync.WaitGroup) {
 	defer done.Done()
 
@@ -276,7 +298,10 @@ func doRequest(configuration *Configuration, result *Result, url string) {
 	contentType := configuration.contentType
 	fileName := ""
 
-	if uploadRandImg {
+	if fixedImgSize != "" {
+		method = "POST"
+		postData, contentType, fileName, _ = fixedImg()
+	} else if uploadRandImg {
 		method = "POST"
 		postData, contentType, fileName, _ = randomImage()
 	}
