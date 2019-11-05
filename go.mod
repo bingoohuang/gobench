@@ -1,4 +1,4 @@
-module http-upload-benchmark
+module github.com/bingoohuang/http-upload-benchmark
 
 go 1.12
 

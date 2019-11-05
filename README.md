@@ -7,11 +7,32 @@ HTTP upload server benchmark in few languages/frameworks and gobench tool
 
 `go get github.com/bingoohuang/http-upload-benchmark/...`
 
-## Building from source
+## Usage
 
-1. download this repository
-1. build: `go build ./...`
-1. create 5MiB sample file then startup upload server: `go-upload-server -impl nethttp -sampleFileSize 5242880`
+```bash
+$ go get -u github.com/bingoohuang/http-upload-benchmark/cmd/go-upload-server
+$ go-upload-server -sampleFileSize 1MiB
+fixFile /tmp/fix1048576
+$ ll -lh /tmp/fix1048576
+-rw-r--r--  1 bingoobjca  wheel   1.0M 11  5 16:53 /tmp/fix1048576
+$ go-upload-server &
+[1] 45560
+$ curl -F 'file=@/tmp/fix1048576'  http://127.0.0.1:8811/upload
+FormFile time 1.007193954s
+tempFile /tmp/fub1
+cost time 1.008135823s
+$ kill 45560
+[1]  + 45560 terminated  go-upload-server
+$ go-upload-server -impl fasthttp &
+[1] 45639
+$ curl -F 'file=@/tmp/fix1048576'  http://127.0.0.1:8811/upload
+FormFile time 864ns
+tempFile /tmp/fub1
+cost time 1.87683ms
+$ kill 45639
+[1]  + 45639 terminated  go-upload-server -impl fasthttp
+```
+
 1. benchmarking: `cd scripts; ./start-jmeter-workbench.sh`
 
 ## Result
