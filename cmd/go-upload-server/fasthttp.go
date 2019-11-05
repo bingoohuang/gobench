@@ -7,19 +7,27 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/reuseport"
 )
 
 func fasthttpUpload(ctx *fasthttp.RequestCtx) {
+	start := time.Now()
+	defer func() {
+		fmt.Println("cost time", time.Since(start))
+	}()
+
 	file, err := ctx.FormFile("file")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	fmt.Println("FormFile time", time.Since(start))
 
 	tmpFile := CreateTmpFile()
+
 	err = fasthttp.SaveMultipartFile(file, tmpFile)
 	if err != nil {
 		fmt.Println(err)

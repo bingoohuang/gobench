@@ -9,12 +9,12 @@ import (
 	"sync/atomic"
 )
 
-func CreateFixedSizedFile(size int64) {
-	fixFile := "/tmp/fix" + strconv.FormatInt(size, 10)
+func CreateFixedSizedFile(size uint64) {
+	fixFile := "/tmp/fix" + strconv.FormatUint(size, 10)
 	fmt.Println("fixFile", fixFile)
 
 	out, _ := os.Create(fixFile)
-	_, _ = io.CopyN(out, rand.Reader, size)
+	_, _ = io.CopyN(out, rand.Reader, int64(size))
 	_ = out.Close()
 }
 
@@ -29,7 +29,7 @@ func CreateTmpFile() string {
 	}
 
 	tempFile := "/tmp/fub" + strconv.FormatInt(seq, 10)
-	fmt.Println("out:", tempFile)
+	fmt.Println("tempFile", tempFile)
 
 	return tempFile
 }
