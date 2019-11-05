@@ -11,7 +11,8 @@ import (
 func NetHttpUpload(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	defer func() {
-		fmt.Println("cost time", time.Since(start))
+		duration := time.Since(start)
+		fmt.Println("cost time", duration)
 	}()
 
 	// _ = r.ParseMultipartForm(16 << 20) // 16 MiB
@@ -22,7 +23,8 @@ func NetHttpUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	fmt.Println("FormFile time", time.Since(start))
+	duration := time.Since(start)
+	fmt.Println("FormFile time", duration)
 
 	tmpFile := CreateTmpFile()
 	out, err := os.Create(tmpFile)

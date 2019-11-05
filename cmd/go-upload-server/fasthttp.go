@@ -16,7 +16,8 @@ import (
 func fasthttpUpload(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	defer func() {
-		fmt.Println("cost time", time.Since(start))
+		duration := time.Since(start)
+		fmt.Println("cost time", duration)
 	}()
 
 	file, err := ctx.FormFile("file")
@@ -24,7 +25,8 @@ func fasthttpUpload(ctx *fasthttp.RequestCtx) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("FormFile time", time.Since(start))
+	duration := time.Since(start)
+	fmt.Println("FormFile time", duration)
 
 	tmpFile := CreateTmpFile()
 
