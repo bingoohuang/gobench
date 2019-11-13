@@ -139,24 +139,20 @@ func printResults(results map[int]*Result, startTime time.Time) {
 	}
 
 	elapsed := time.Since(startTime)
-	if elapsed == 0 {
-		elapsed = 1
-	}
-
-	elapsedSeconds := uint64(elapsed.Seconds())
+	elapsedSeconds := elapsed.Seconds()
 
 	fmt.Println()
 	fmt.Printf("Requests:                       %10d hits\n", requests)
 	fmt.Printf("Successful requests:            %10d hits\n", success)
 	fmt.Printf("Network failed:                 %10d hits\n", networkFailed)
 	fmt.Printf("Bad requests failed (!2xx):     %10d hits\n", badFailed)
-	fmt.Printf("Successful requests rate:       %10d hits/sec\n", success/elapsedSeconds)
-	fmt.Printf("Read throughput:                %10s/sec\n", humanize.IBytes(readThroughput/elapsedSeconds))
-	fmt.Printf("Write throughput:               %10s/sec\n", humanize.IBytes(writeThroughput/elapsedSeconds))
+	fmt.Printf("Successful requests rate:       %10d hits/sec\n", uint64(float64(success)/elapsedSeconds))
+	fmt.Printf("Read throughput:                %10s/sec\n", humanize.IBytes(uint64(float64(readThroughput)/elapsedSeconds)))
+	fmt.Printf("Write throughput:               %10s/sec\n", humanize.IBytes(uint64(float64(writeThroughput)/elapsedSeconds)))
 	fmt.Printf("Test time:                      %10s\n", elapsed.String())
 }
 
-var conectionChan chan bool
+var connectionChan chan bool
 
 // NewConfiguration create Configuration
 func NewConfiguration() (configuration *Configuration, err error) {
@@ -176,9 +172,9 @@ func NewConfiguration() (configuration *Configuration, err error) {
 		return nil, errors.New("only one should be provided: [requests|duration]")
 	}
 
-	conectionChan = make(chan bool, connections)
+	connectionChan = make(chan bool, connections)
 	for i := 0; i < connections; i++ {
-		conectionChan <- true
+		connectionChan <- true
 	}
 
 	configuration = &Configuration{
@@ -295,7 +291,7 @@ func doRequest(configuration *Configuration, result *Result, url string) {
 		postData, contentType, fileName, _ = randomImage(fixedImgSize)
 	}
 
-	<-conectionChan
+	<-connectionChan
 	go goRequest(result, configuration, url, method, contentType, fileName, postData)
 }
 
@@ -303,7 +299,7 @@ func goRequest(result *Result, configuration *Configuration, url, method, conten
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	defer func() {
-		conectionChan <- true
+		connectionChan <- true
 	}()
 
 	req.SetRequestURI(url)
