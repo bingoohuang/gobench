@@ -10,8 +10,12 @@ func main() {
 	addr := flag.String("addr", ":8812", "listen address")
 	flag.Parse()
 
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("Hello\n"))
+	})
+
 	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK\n"))
 	})
 
 	http.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
