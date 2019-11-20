@@ -18,7 +18,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -31,8 +30,8 @@ import (
 )
 
 var (
-	requests         uint64
-	duraton          string
+	requests         int
+	duration         string
 	threads          int
 	connections      int
 	urls             string
@@ -55,7 +54,7 @@ type Configuration struct {
 	urls        []string
 	method      string
 	postData    []byte
-	requests    uint64
+	requests    int
 	duration    time.Duration
 	keepAlive   bool
 	authHeader  string
@@ -64,16 +63,8 @@ type Configuration struct {
 	myClient fasthttp.Client
 }
 
-// Result of gobench
-type Result struct {
-	requests      uint64
-	success       uint64
-	networkFailed uint64
-	badFailed     uint64
-}
-
 func init() {
-	flag.Uint64Var(&requests, "r", 0, "Number of requests per client")
+	flag.IntVar(&requests, "r", 0, "Number of requests per client")
 	flag.IntVar(&connections, "c", 100, "Number of connections")
 	flag.IntVar(&threads, "t", 100, "Number of concurrent threads")
 	flag.StringVar(&urls, "u", "", "URL list (comma separated), or @URL's file path (line separated)")
@@ -83,7 +74,7 @@ func init() {
 	flag.StringVar(&fixedImgSize, "fixedImgSize", "", "Upload fixed img size (eg. 44kB, 17MB)")
 	flag.StringVar(&postDataFilePath, "postDataFile", "", "HTTP POST data file path")
 	flag.StringVar(&uploadFilePath, "f", "", "HTTP upload file path")
-	flag.StringVar(&duraton, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
+	flag.StringVar(&duration, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
 	flag.UintVar(&writeTimeout, "writeTimeout", 5000, "Write timeout (in milliseconds)")
 	flag.UintVar(&readTimeout, "readTimeout", 5000, "Read timeout (in milliseconds)")
 	flag.StringVar(&authHeader, "authHeader", "", "Authorization header")
@@ -96,7 +87,6 @@ func init() {
 
 func main() {
 	startTime := time.Now()
-	results := make(map[int]*Result)
 
 	HandleInterrupt(func() {
 		exitRequested = true
@@ -107,49 +97,80 @@ func main() {
 	if err != nil {
 		fmt.Println(err.Error())
 		flag.Usage()
+
 		return
 	}
 
 	fmt.Printf("Dispatching %d threads (goroutines)\n", threads)
 
-	var done sync.WaitGroup
-	done.Add(threads)
+	resultChan := make(chan requestResult)
+	totalReqsChan := make(chan int)
+	statComplete := make(chan bool)
+
+	var rr requestResult
+	go stating(resultChan, &rr, totalReqsChan, statComplete)
+
+	requestsChan := make(chan int, threads)
+
 	for i := 0; i < threads; i++ {
-		result := &Result{}
-		results[i] = result
-		go client(configuration, result, &done)
+		go client(requestsChan, resultChan, configuration)
 	}
 
 	fmt.Println("Waiting for results...")
-	done.Wait()
-	printResults(results, startTime)
+
+	totalRequests := waitResults(requestsChan, totalReqsChan, statComplete)
+
+	printResults(startTime, totalRequests, rr)
 }
 
-func printResults(results map[int]*Result, startTime time.Time) {
-	var requests uint64
-	var success uint64
-	var networkFailed uint64
-	var badFailed uint64
-
-	for _, result := range results {
-		requests += result.requests
-		success += result.success
-		networkFailed += result.networkFailed
-		badFailed += result.badFailed
-	}
-
+func printResults(startTime time.Time, totalRequests int, rr requestResult) {
 	elapsed := time.Since(startTime)
 	elapsedSeconds := elapsed.Seconds()
 
 	fmt.Println()
-	fmt.Printf("Requests:                       %10d hits\n", requests)
-	fmt.Printf("Successful requests:            %10d hits\n", success)
-	fmt.Printf("Network failed:                 %10d hits\n", networkFailed)
-	fmt.Printf("Bad requests failed (!2xx):     %10d hits\n", badFailed)
-	fmt.Printf("Successful requests rate:       %10d hits/sec\n", uint64(float64(success)/elapsedSeconds))
+	fmt.Printf("Requests:                       %10d hits\n", totalRequests)
+	fmt.Printf("Successful requests:            %10d hits\n", rr.success)
+	fmt.Printf("Network failed:                 %10d hits\n", rr.networkFailed)
+	fmt.Printf("Bad requests failed (!2xx):     %10d hits\n", rr.badFailed)
+	fmt.Printf("Successful requests rate:       %10d hits/sec\n", uint64(float64(rr.success)/elapsedSeconds))
 	fmt.Printf("Read throughput:                %10s/sec\n", humanize.IBytes(uint64(float64(readThroughput)/elapsedSeconds)))
 	fmt.Printf("Write throughput:               %10s/sec\n", humanize.IBytes(uint64(float64(writeThroughput)/elapsedSeconds)))
 	fmt.Printf("Test time:                      %10s\n", elapsed.String())
+}
+
+func waitResults(requestsChan chan int, totalReqsChan chan int, statComplete chan bool) int {
+	totalRequests := 0
+	for i := 0; i < threads; i++ {
+		totalRequests += <-requestsChan
+	}
+
+	totalReqsChan <- totalRequests
+	<-statComplete
+	return totalRequests
+}
+
+func stating(resultChan chan requestResult, rr *requestResult, totalReqsChan chan int, statComplete chan bool) {
+	var received int
+
+	for {
+		select {
+		case r := <-resultChan:
+			received++
+			rr.success += r.success
+			rr.networkFailed += r.networkFailed
+			rr.badFailed += r.badFailed
+		case totalReqs := <-totalReqsChan:
+			for i := 0; i < totalReqs-received; i++ {
+				r := <-resultChan
+				rr.success += r.success
+				rr.networkFailed += r.networkFailed
+				rr.badFailed += r.badFailed
+			}
+
+			statComplete <- true
+			return
+		}
+	}
 }
 
 var connectionChan chan bool
@@ -160,7 +181,7 @@ func NewConfiguration() (configuration *Configuration, err error) {
 		return nil, errors.New("urls must be provided")
 	}
 
-	period, err := time.ParseDuration(duraton)
+	period, err := time.ParseDuration(duration)
 	if err != nil {
 		return nil, err
 	}
@@ -265,22 +286,25 @@ func randomImage(imageSize string) (imageBytes []byte, contentType, imageFile st
 	return
 }
 
-func client(configuration *Configuration, result *Result, done *sync.WaitGroup) {
-	defer done.Done()
-
+func client(stopChan chan int, resultChan chan requestResult, configuration *Configuration) {
 	urlIndex := rand.Intn(len(configuration.urls))
 	requests := configuration.requests
-	for !exitRequested && (requests == 0 || result.requests < requests) {
+
+	i := 0
+	for ; !exitRequested && (requests == 0 || i < requests); {
 		url := configuration.urls[urlIndex]
-		doRequest(configuration, result, url)
+		i++
+		doRequest(resultChan, configuration, url)
 
 		if urlIndex++; urlIndex >= len(configuration.urls) {
 			urlIndex = 0
 		}
 	}
+
+	stopChan <- i
 }
 
-func doRequest(configuration *Configuration, result *Result, url string) {
+func doRequest(resultChan chan requestResult, configuration *Configuration, url string) {
 	method := configuration.method
 	postData := configuration.postData
 	contentType := configuration.contentType
@@ -292,45 +316,54 @@ func doRequest(configuration *Configuration, result *Result, url string) {
 	}
 
 	<-connectionChan
-	go goRequest(result, configuration, url, method, contentType, fileName, postData)
+	go goRequest(resultChan, configuration, url, method, contentType, fileName, postData)
 }
 
-func goRequest(result *Result, configuration *Configuration, url, method, contentType, fileName string, postData []byte) {
+type requestResult struct {
+	networkFailed int
+	success       int
+	badFailed     int
+}
+
+func goRequest(resultChan chan requestResult, cnf *Configuration, url, method, contentType, fileName string, postData []byte) {
 	req := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(req)
 	defer func() {
+		fasthttp.ReleaseRequest(req)
 		connectionChan <- true
 	}()
 
 	req.SetRequestURI(url)
 	req.Header.SetMethod(method)
-	SetHeaderIfNotEmpty(req, "Connection", IfElse(configuration.keepAlive, "keep-alive", "close"))
-	SetHeaderIfNotEmpty(req, "Authorization", configuration.authHeader)
+	SetHeaderIfNotEmpty(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
+	SetHeaderIfNotEmpty(req, "Authorization", cnf.authHeader)
 	SetHeaderIfNotEmpty(req, "Content-Type", contentType)
 	req.SetBody(postData)
 
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 
-	err := configuration.myClient.Do(req, resp)
+	err := cnf.myClient.Do(req, resp)
 	statusCode := resp.StatusCode()
-	atomic.AddUint64(&result.requests, 1)
+
+	var rr requestResult
 
 	var resultDesc string
 	if err != nil {
-		atomic.AddUint64(&result.networkFailed, 1)
+		rr.networkFailed = 1
 		resultDesc = "network failed bcoz " + err.Error()
 	} else if statusCode < 400 {
-		atomic.AddUint64(&result.success, 1)
-		resultDesc = "succuess"
+		rr.success = 1
+		resultDesc = "success"
 	} else {
-		atomic.AddUint64(&result.badFailed, 1)
+		rr.badFailed = 1
 		resultDesc = "failed"
 	}
 
 	if printResult {
 		fmt.Fprintln(os.Stdout, "fileName", fileName, resultDesc, statusCode, string(resp.Body()))
 	}
+
+	resultChan <- rr
 }
 
 // SetHeaderIfNotEmpty set request header if value is not empty.
@@ -350,8 +383,7 @@ type MyConn struct {
 
 // Read bytes from net connection
 func (myConn *MyConn) Read(b []byte) (n int, err error) {
-	n, err = myConn.Conn.Read(b)
-	if err == nil {
+	if n, err = myConn.Conn.Read(b); err == nil {
 		atomic.AddUint64(&readThroughput, uint64(n))
 	}
 
@@ -360,8 +392,7 @@ func (myConn *MyConn) Read(b []byte) (n int, err error) {
 
 // Write bytes to net
 func (myConn *MyConn) Write(b []byte) (n int, err error) {
-	n, err = myConn.Conn.Write(b)
-	if err == nil {
+	if n, err = myConn.Conn.Write(b); err == nil {
 		atomic.AddUint64(&writeThroughput, uint64(n))
 	}
 	return
@@ -384,7 +415,7 @@ func HandleInterrupt(f func(), exitRightNow bool) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt)
 	go func() {
-		_ = <-ch
+		<-ch
 		f()
 		if exitRightNow {
 			os.Exit(0)
