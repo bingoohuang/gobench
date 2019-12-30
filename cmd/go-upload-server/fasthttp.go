@@ -15,6 +15,7 @@ import (
 
 func fasthttpUpload(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
+
 	defer func() {
 		duration := time.Since(start)
 		fmt.Println("cost time", duration)
@@ -25,6 +26,7 @@ func fasthttpUpload(ctx *fasthttp.RequestCtx) {
 		fmt.Println(err)
 		return
 	}
+
 	duration := time.Since(start)
 	fmt.Println("FormFile time", duration)
 
@@ -41,26 +43,34 @@ func fasthttpUpload(ctx *fasthttp.RequestCtx) {
 func createForkListener(listenAddr string) net.Listener {
 	if !child {
 		children := make([]*exec.Cmd, runtime.NumCPU())
+
 		for i := range children {
-			children[i] = exec.Command(os.Args[0], "-impl", "fasthttp", "-child")
+			children[i] = exec.Command(os.Args[0], "-impl", "fasthttp", "-child") //nolint:gosec
+
 			children[i].Stdout = os.Stdout
 			children[i].Stderr = os.Stderr
+
 			if err := children[i].Start(); err != nil {
 				log.Fatal(err)
 			}
 		}
+
 		for _, ch := range children {
 			if err := ch.Wait(); err != nil {
 				log.Print(err)
 			}
 		}
+
 		os.Exit(0)
 	}
 
 	runtime.GOMAXPROCS(1)
+
 	ln, err := reuseport.Listen("tcp4", listenAddr)
+
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	return ln
 }

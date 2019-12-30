@@ -9,19 +9,21 @@ import (
 )
 
 var (
-	impl           string
-	sampleFileSize string
-	port           string
-	child          bool
-	fork           bool
+	impl           string // nolint gochecknoglobals
+	sampleFileSize string // nolint gochecknoglobals
+	port           string // nolint gochecknoglobals
+	child          bool   // nolint gochecknoglobals
+	fork           bool   // nolint gochecknoglobals
 )
 
-func init() {
+func init() { // nolint gochecknoinits
 	flag.StringVar(&port, "port", "8811", "listen port")
 	flag.StringVar(&impl, "impl", "nethttp", "implementation: nethttp/fasthttp")
-	flag.StringVar(&sampleFileSize, "sampleFileSize", "", "create sampling file with specified size （eg. 44kB, 17MB)） and exit")
+	flag.StringVar(&sampleFileSize, "sampleFileSize", "",
+		"create sampling file with specified size （eg. 44kB, 17MB)） and exit")
 	flag.BoolVar(&fork, "fork", false, "fork children processes when --imp=fasthttp")
-	flag.BoolVar(&child, "child", false, "flag child process when --imp=fasthttp (CAUTION: only used internally by program)")
+	flag.BoolVar(&child, "child", false,
+		"flag child process when --imp=fasthttp (CAUTION: only used internally by program)")
 
 	flag.Parse()
 }
@@ -32,7 +34,9 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+
 		CreateFixedSizedFile(fixedSize)
+
 		return
 	}
 
@@ -58,7 +62,7 @@ func main() {
 			_ = s.ListenAndServe(":" + port)
 		}
 	default:
-		http.HandleFunc("/upload", NetHttpUpload)
+		http.HandleFunc("/upload", NetHTTPUpload)
 		_ = http.ListenAndServe(":"+port, nil)
 	}
 }

@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
-func NetHttpUpload(w http.ResponseWriter, r *http.Request) {
+// NetHTTPUpload upload
+func NetHTTPUpload(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+
 	defer func() {
 		duration := time.Since(start)
 		fmt.Println("cost time", duration)
@@ -28,10 +30,12 @@ func NetHttpUpload(w http.ResponseWriter, r *http.Request) {
 
 	tmpFile := CreateTmpFile()
 	out, err := os.Create(tmpFile)
+
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	defer out.Close()
 	_, _ = io.Copy(out, file)
 }

@@ -169,6 +169,7 @@ func stating(resultChan chan requestResult, rr *requestResult, totalReqsChan cha
 		select {
 		case r := <-resultChan:
 			received++
+
 			rr.success += r.success
 			rr.networkFailed += r.networkFailed
 			rr.badFailed += r.badFailed
@@ -246,8 +247,10 @@ func (a *App) dealUploadFilePath(c *Conf) {
 	}
 
 	var err error
+
 	c.method = methodPOST
 	c.postData, c.contentType, err = ReadUploadMultipartFile(a.uploadFileName, a.uploadFilePath)
+
 	if err != nil {
 		log.Fatalf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uploadFilePath, err)
 	}
@@ -262,6 +265,7 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 
 	c.method = methodPOST
 	c.postData, err = ioutil.ReadFile(a.postDataFilePath)
+
 	if err != nil {
 		log.Fatalf("Error in ioutil.ReadFile for file path: %s Error: %v", a.postDataFilePath, err)
 	}
