@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 // NetHTTPUpload upload
@@ -17,12 +20,21 @@ func NetHTTPUpload(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("cost time", duration)
 	}()
 
-	// _ = r.ParseMultipartForm(16 << 20) // 16 MiB
+	if err := r.ParseMultipartForm(16 /*16 MiB */ << 20); err != nil {
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+
+		return
+	}
+
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+
 		return
 	}
+
 	defer file.Close()
 
 	duration := time.Since(start)
@@ -33,9 +45,41 @@ func NetHTTPUpload(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+
 		return
 	}
 
 	defer out.Close()
-	_, _ = io.Copy(out, file)
+
+	written, err := io.Copy(out, file)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+
+		return
+	}
+
+	writeJSON(w, uploadResult{
+		CostTime: duration.String(),
+		TempFile: tmpFile,
+		FileSize: humanize.Bytes(uint64(written)),
+	})
+}
+
+type uploadResult struct {
+	CostTime string
+	TempFile string
+	FileSize string
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	js, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(js)
 }
