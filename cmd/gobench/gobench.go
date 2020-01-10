@@ -42,7 +42,7 @@ type App struct {
 	keepAlive     bool
 	uploadRandImg bool
 	exitRequested bool
-	printResult   bool
+	printResult   string
 
 	writeTimeout    uint
 	readTimeout     uint
@@ -78,7 +78,7 @@ func (a *App) Init() {
 	flag.IntVar(&a.threads, "t", 100, "Number of concurrent threads")
 	flag.StringVar(&a.urls, "u", "", "URL list (comma separated), or @URL's file path (line separated)")
 	flag.BoolVar(&a.keepAlive, "keepAlive", true, "Do HTTP keep-alive")
-	flag.BoolVar(&a.printResult, "v", false, "Print http request result")
+	flag.StringVar(&a.printResult, "p", "", "0:Print http request result 1:with extra newline")
 	flag.BoolVar(&a.uploadRandImg, "randomPng", false, "Upload random png images by file upload")
 	flag.StringVar(&a.fixedImgSize, "fixedImgSize", "", "Upload fixed img size (eg. 44kB, 17MB)")
 	flag.StringVar(&a.postDataFilePath, "postDataFile", "", "HTTP POST data file path")
@@ -422,11 +422,24 @@ func (a *App) do(result chan requestResult, cnf *Conf, url, method, contentType,
 		resultDesc = "failed"
 	}
 
-	if a.printResult {
-		fmt.Fprintln(os.Stdout, "fileName", fileName, resultDesc, statusCode, string(resp.Body()))
-	}
+	a.printReslt(fileName, resultDesc, statusCode, resp)
 
 	result <- rr
+}
+
+func (a *App) printReslt(fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+	var f func(w io.Writer, a ...interface{}) (n int, err error)
+
+	switch a.printResult {
+	case "0":
+		f = fmt.Fprint
+	case "1":
+		f = fmt.Fprintln
+	}
+
+	if f != nil {
+		_, _ = f(os.Stdout, "fileName", fileName, resultDesc, statusCode, string(resp.Body()))
+	}
 }
 
 // SetHeaderIfNotEmpty set request header if value is not empty.
