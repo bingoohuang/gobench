@@ -438,7 +438,21 @@ func (a *App) printReslt(fileName string, resultDesc string, statusCode int, res
 	}
 
 	if f != nil {
-		_, _ = f(os.Stdout, "fileName", fileName, resultDesc, statusCode, string(resp.Body()))
+		r := resultDesc + " "
+		if fileName != "" {
+			r += "file:" + fileName + " "
+		}
+
+		if statusCode != 200 {
+			r += "[" + strconv.Itoa(statusCode) + "] "
+		}
+
+		body := string(resp.Body())
+		if body != "" {
+			r += body
+		}
+
+		_, _ = f(os.Stdout, r)
 	}
 }
 
