@@ -438,14 +438,12 @@ func (a *App) printReslt(fileName string, resultDesc string, statusCode int, res
 	}
 
 	if f != nil {
-		r := resultDesc + " "
+		r := ""
 		if fileName != "" {
 			r += "file:" + fileName + " "
 		}
 
-		if statusCode != 200 {
-			r += "[" + strconv.Itoa(statusCode) + "] "
-		}
+		r += resultDesc + " [" + strconv.Itoa(statusCode) + "] "
 
 		body := string(resp.Body())
 		if body != "" {
