@@ -1,3 +1,24 @@
+1. [Vegeta HTTP load testing tool and library.](https://github.com/tsenart/vegeta)
+    
+    欣赏点:
+    
+    If you are a happy user of iTerm, you can integrate vegeta with jplot using jaggr to plot a vegeta report in real-time in the comfort of your terminal:
+
+    ```bash
+    echo 'GET http://localhost:8080' | \
+        vegeta attack -rate 5000 -duration 10m | vegeta encode | \
+        jaggr @count=rps \
+              hist\[100,200,300,400,500\]:code \
+              p25,p50,p95:latency \
+              sum:bytes_in \
+              sum:bytes_out | \
+        jplot rps+code.hist.100+code.hist.200+code.hist.300+code.hist.400+code.hist.500 \
+              latency.p95+latency.p50+latency.p25 \
+              bytes_in.sum+bytes_out.sum
+    ```
+    
+    ![](https://i.imgur.com/ttBDsQS.gif)
+
 1. [An HTTP performance testing tool written in GoLang](https://github.com/arham-jain/gonce)
 1. [Modern cross-platform HTTP load-testing tool written in Go](https://github.com/rogerwelin/cassowary)
   > Cassowary 是一个现代的 http / s、直观的跨平台负载测试工具，Go开发，用于开发人员、测试人员和系统管理员。 食火鸡从很棒的项目中获得灵感，比如 k6，ab & httpstat。
