@@ -11,12 +11,15 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -54,7 +57,9 @@ type App struct {
 	fixedImgSize   string
 	contentType    string
 
-	connectionChan chan bool
+	connectionChan      chan bool
+	responsePrinter     func(s string)
+	responsePrinterFile *os.File
 }
 
 // Conf for gobench
@@ -78,7 +83,7 @@ func (a *App) Init() {
 	flag.IntVar(&a.threads, "t", 100, "Number of concurrent threads")
 	flag.StringVar(&a.urls, "u", "", "URL list (comma separated), or @URL's file path (line separated)")
 	flag.BoolVar(&a.keepAlive, "keepAlive", true, "Do HTTP keep-alive")
-	flag.StringVar(&a.printResult, "p", "", "0:Print http request result 1:with extra newline")
+	flag.StringVar(&a.printResult, "p", "", "0:Print http response; 1:with extra newline; x.log: log file")
 	flag.BoolVar(&a.uploadRandImg, "randomPng", false, "Upload random png images by file upload")
 	flag.StringVar(&a.fixedImgSize, "fixedImgSize", "", "Upload fixed img size (eg. 44kB, 17MB)")
 	flag.StringVar(&a.postDataFilePath, "postDataFile", "", "HTTP POST data file path")
@@ -93,6 +98,8 @@ func (a *App) Init() {
 	flag.Parse()
 
 	rand.Seed(time.Now().UnixNano())
+
+	a.setupResponsePrinter()
 }
 
 const methodPOST = "POST"
@@ -101,6 +108,13 @@ func main() {
 	var app App
 
 	app.Init()
+
+	if app.responsePrinterFile != nil {
+		defer func() {
+			app.responsePrinterFile.Close()
+			fmt.Println(app.printResult, " generated!")
+		}()
+	}
 
 	startTime := time.Now()
 
@@ -307,9 +321,11 @@ func (a *App) period(c *Conf) {
 
 	go func() {
 		<-timeout
+
 		pid := os.Getpid()
 		proc, _ := os.FindProcess(pid)
 		err := proc.Signal(os.Interrupt)
+
 		if err != nil {
 			log.Println(err)
 			return
@@ -317,6 +333,7 @@ func (a *App) period(c *Conf) {
 	}()
 }
 
+// nolint gomnd
 func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, imageFile string) {
 	var err error
 
@@ -350,9 +367,9 @@ func (a *App) client(stopChan chan int, resultChan chan requestResult, configura
 	requests := configuration.requests
 
 	i := 0
-	for !a.exitRequested && (requests == 0 || i < requests) {
+	for ; !a.exitRequested && (requests == 0 || i < requests); i++ {
 		url := configuration.urls[urlIndex]
-		i++
+
 		a.doRequest(resultChan, configuration, url)
 
 		if urlIndex++; urlIndex >= len(configuration.urls) {
@@ -413,45 +430,38 @@ func (a *App) do(result chan requestResult, cnf *Conf, url, method, contentType,
 	switch {
 	case err != nil:
 		rr.networkFailed = 1
-		resultDesc = "network failed bcoz " + err.Error()
-	case statusCode < 400:
+		resultDesc = "[x] " + err.Error()
+	case statusCode < http.StatusBadRequest:
 		rr.success = 1
-		resultDesc = "success"
+		resultDesc = "[√]"
 	default:
 		rr.badFailed = 1
-		resultDesc = "failed"
+		resultDesc = "[x]"
 	}
 
-	a.printReslt(fileName, resultDesc, statusCode, resp)
+	a.printResponse(fileName, resultDesc, statusCode, resp)
 
 	result <- rr
 }
 
-func (a *App) printReslt(fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
-	var f func(w io.Writer, a ...interface{}) (n int, err error)
-
-	switch a.printResult {
-	case "0":
-		f = fmt.Fprint
-	case "1":
-		f = fmt.Fprintln
+func (a *App) printResponse(fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+	if a.responsePrinter == nil {
+		return
 	}
 
-	if f != nil {
-		r := ""
-		if fileName != "" {
-			r += "file:" + fileName + " "
-		}
-
-		r += resultDesc + " [" + strconv.Itoa(statusCode) + "] "
-
-		body := string(resp.Body())
-		if body != "" {
-			r += body
-		}
-
-		_, _ = f(os.Stdout, r)
+	r := ""
+	if fileName != "" {
+		r += "file:" + fileName + " "
 	}
+
+	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] "
+
+	body := string(resp.Body())
+	if body != "" {
+		r += body
+	}
+
+	a.responsePrinter(r)
 }
 
 // SetHeaderIfNotEmpty set request header if value is not empty.
@@ -497,7 +507,65 @@ func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 	}
 }
 
+var (
+	re1 = regexp.MustCompile(`\r?\n`)  // nolint gochecknoglobals
+	re2 = regexp.MustCompile(`\s{2,}`) // nolint gochecknoglobals
+)
+
+func line(s string) string {
+	s = re1.ReplaceAllString(s, " ")
+	s = strings.TrimSpace(re2.ReplaceAllString(s, " "))
+
+	return s
+}
+
+// nolint gochecknoglobals
+var (
+	lastResponse         string
+	lastResponseLock     sync.Mutex
+	lastResponseThrottle = MakeThrottle(1 * time.Second)
+)
+
+func (a *App) setupResponsePrinter() {
+	var f func(a string)
+
+	switch r := a.printResult; r {
+	case "":
+		return
+	case "0":
+		f = func(a string) {
+			_, _ = fmt.Fprint(os.Stdout, line(a))
+		}
+	case "1":
+		f = func(a string) {
+			_, _ = fmt.Fprintln(os.Stdout, line(a))
+		}
+	default:
+		lf, err := os.OpenFile(r, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			panic(err)
+		}
+
+		a.responsePrinterFile = lf
+		f = func(s string) { _, _ = a.responsePrinterFile.WriteString(s + "\n") }
+	}
+
+	a.responsePrinter = func(a string) {
+		lastResponseLock.Lock()
+		defer lastResponseLock.Unlock()
+
+		if lastResponse == "" || lastResponse != a {
+			f(a)
+
+			lastResponse = a
+		} else if lastResponseThrottle.Allow() {
+			f(".")
+		}
+	}
+}
+
 // HandleInterrupt handles Ctrl+C to exit after calling f.
+// nolint gomnd
 func HandleInterrupt(f func(), exitRightNow bool) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt)
@@ -574,4 +642,52 @@ func ReadUploadMultipartFile(filename, filePath string) (imageBytes []byte, cont
 	_ = writer.Close()
 
 	return buffer.Bytes(), writer.FormDataContentType(), nil
+}
+
+// Throttle ...
+type Throttle struct {
+	tokenC chan bool
+	stopC  chan bool
+}
+
+// MakeThrottle ...
+func MakeThrottle(duration time.Duration) *Throttle {
+	t := &Throttle{
+		tokenC: make(chan bool, 1),
+		stopC:  make(chan bool, 1),
+	}
+
+	go func() {
+		ticker := time.NewTicker(duration)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-t.stopC:
+				return
+			case <-ticker.C:
+				select {
+				case t.tokenC <- true:
+				default:
+				}
+			}
+		}
+	}()
+
+	return t
+}
+
+// Stop ...
+func (t *Throttle) Stop() {
+	t.stopC <- true
+}
+
+// Allow ...
+func (t *Throttle) Allow() bool {
+	select {
+	case <-t.tokenC:
+		return true
+	default:
+		return false
+	}
 }

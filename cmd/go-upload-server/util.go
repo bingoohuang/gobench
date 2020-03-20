@@ -25,7 +25,7 @@ var x int64 // nolint
 func CreateTmpFile() string {
 	seq := atomic.AddInt64(&x, 1)
 
-	if seq >= 1000 {
+	if seq >= 1000 { // nolint gomnd
 		atomic.StoreInt64(&x, 1)
 
 		seq = 1
