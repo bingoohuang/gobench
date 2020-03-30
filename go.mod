@@ -3,7 +3,7 @@ module github.com/bingoohuang/http-upload-benchmark
 go 1.12
 
 require (
-	github.com/bingoohuang/golang-trial v0.0.0-20191107150336-91c8d8f0ea5b
+	github.com/bingoohuang/golang-trial v0.0.0-20200330063926-5ddac77a5d83
 	github.com/docker/go-units v0.4.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/hashicorp/go-cleanhttp v0.5.1
