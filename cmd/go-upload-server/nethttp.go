@@ -12,7 +12,7 @@ import (
 )
 
 // NetHTTPUpload upload
-// nolint gomnd
+// nolint:gomnd
 func NetHTTPUpload(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 

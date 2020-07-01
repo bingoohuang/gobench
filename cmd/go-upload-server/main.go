@@ -11,16 +11,16 @@ import (
 )
 
 var (
-	impl           string // nolint gochecknoglobals
-	sampleFileSize string // nolint gochecknoglobals
-	addr           string // nolint gochecknoglobals
-	child          bool   // nolint gochecknoglobals
-	fork           bool   // nolint gochecknoglobals
+	impl           string // nolint:gochecknoglobals
+	sampleFileSize string // nolint:gochecknoglobals
+	addr           string // nolint:gochecknoglobals
+	child          bool   // nolint:gochecknoglobals
+	fork           bool   // nolint:gochecknoglobals
 
-	maxRequestBodySize string // nolint gochecknoglobals
+	maxRequestBodySize string // nolint:gochecknoglobals
 )
 
-func init() { // nolint gochecknoinits
+func init() { // nolint:gochecknoinits
 	flag.StringVar(&maxRequestBodySize, "maxRequestBodySize", "10MiB", "max upload file size")
 	flag.StringVar(&addr, "addr", ":8811", "listen address")
 	flag.StringVar(&impl, "impl", "nethttp", "implementation: nethttp/fasthttp")

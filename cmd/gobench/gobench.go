@@ -37,6 +37,7 @@ type App struct {
 	threads     int
 	connections int
 
+	method           string
 	duration         string
 	urls             string
 	postDataFilePath string
@@ -62,7 +63,7 @@ type App struct {
 	responsePrinterFile *os.File
 }
 
-// Conf for gobench
+// Conf for gobench.
 type Conf struct {
 	urls        []string
 	method      string
@@ -88,6 +89,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.fixedImgSize, "fixedImgSize", "", "Upload fixed img size (eg. 44kB, 17MB)")
 	flag.StringVar(&a.postDataFilePath, "postDataFile", "", "HTTP POST data file path")
 	flag.StringVar(&a.uploadFilePath, "f", "", "HTTP upload file path")
+	flag.StringVar(&a.method, "method", "", "HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc")
 	flag.StringVar(&a.duration, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
 	flag.UintVar(&a.writeTimeout, "writeTimeout", 5000, "Write timeout (in milliseconds)")
 	flag.UintVar(&a.readTimeout, "readTimeout", 5000, "Read timeout (in milliseconds)")
@@ -101,8 +103,6 @@ func (a *App) Init() {
 
 	a.setupResponsePrinter()
 }
-
-const methodPOST = "POST"
 
 func main() {
 	var app App
@@ -202,7 +202,7 @@ func stating(resultChan chan requestResult, rr *requestResult, totalReqsChan cha
 	}
 }
 
-// NewConfiguration create Conf
+// NewConfiguration create Conf.
 func (a *App) NewConfiguration() (c *Conf) {
 	a.connectionChan = make(chan bool, a.connections)
 	for i := 0; i < a.connections; i++ {
@@ -211,11 +211,14 @@ func (a *App) NewConfiguration() (c *Conf) {
 
 	c = &Conf{
 		urls:       make([]string, 0),
-		method:     "GET",
 		postData:   nil,
 		keepAlive:  a.keepAlive,
 		requests:   a.requests,
 		authHeader: a.authHeader,
+	}
+
+	if a.method != "" {
+		c.method = strings.ToUpper(a.method)
 	}
 
 	a.period(c)
@@ -232,7 +235,7 @@ func (a *App) NewConfiguration() (c *Conf) {
 		c.contentType = a.contentType
 	}
 
-	return
+	return c
 }
 
 func (a *App) processUrls(c *Conf) {
@@ -262,7 +265,8 @@ func (a *App) dealUploadFilePath(c *Conf) {
 
 	var err error
 
-	c.method = methodPOST
+	a.tryMethod(c, http.MethodPost)
+
 	c.postData, c.contentType, err = ReadUploadMultipartFile(a.uploadFileName, a.uploadFilePath)
 
 	if err != nil {
@@ -277,7 +281,8 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 
 	var err error
 
-	c.method = methodPOST
+	a.tryMethod(c, http.MethodPost)
+
 	c.postData, err = ioutil.ReadFile(a.postDataFilePath)
 
 	if err != nil {
@@ -289,6 +294,12 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 		if firstByte == '{' || firstByte == '[' {
 			c.contentType = "application/json; charset=utf-8"
 		}
+	}
+}
+
+func (a *App) tryMethod(c *Conf, method string) {
+	if c.method == "" {
+		c.method = method
 	}
 }
 
@@ -333,7 +344,7 @@ func (a *App) period(c *Conf) {
 	}()
 }
 
-// nolint gomnd
+// nolint:gomnd
 func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, imageFile string) {
 	var err error
 
@@ -380,20 +391,22 @@ func (a *App) client(stopChan chan int, resultChan chan requestResult, configura
 	stopChan <- i
 }
 
-func (a *App) doRequest(resultChan chan requestResult, configuration *Conf, url string) {
-	method := configuration.method
-	postData := configuration.postData
-	contentType := configuration.contentType
+func (a *App) doRequest(resultChan chan requestResult, c *Conf, url string) {
+	postData := c.postData
+	contentType := c.contentType
 	fileName := ""
 
 	if a.uploadRandImg || a.fixedImgSize != "" {
-		method = "POST"
+		a.tryMethod(c, http.MethodPost)
+
 		postData, contentType, fileName = a.randomImage(a.fixedImgSize)
 	}
 
+	a.tryMethod(c, http.MethodGet)
+
 	<-a.connectionChan
 
-	go a.do(resultChan, configuration, url, method, contentType, fileName, postData)
+	go a.do(resultChan, c, url, c.method, contentType, fileName, postData)
 }
 
 type requestResult struct {
@@ -471,13 +484,13 @@ func SetHeaderIfNotEmpty(request *fasthttp.Request, header, value string) {
 	}
 }
 
-// MyConn for net connection
+// MyConn for net connection.
 type MyConn struct {
 	net.Conn
 	app *App
 }
 
-// Read bytes from net connection
+// Read bytes from net connection.
 func (myConn *MyConn) Read(b []byte) (n int, err error) {
 	if n, err = myConn.Conn.Read(b); err == nil {
 		atomic.AddUint64(&myConn.app.readThroughput, uint64(n))
@@ -486,7 +499,7 @@ func (myConn *MyConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-// Write bytes to net
+// Write bytes to net.
 func (myConn *MyConn) Write(b []byte) (n int, err error) {
 	if n, err = myConn.Conn.Write(b); err == nil {
 		atomic.AddUint64(&myConn.app.writeThroughput, uint64(n))
@@ -495,7 +508,7 @@ func (myConn *MyConn) Write(b []byte) (n int, err error) {
 	return
 }
 
-// MyDialer create Dial function
+// MyDialer create Dial function.
 func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 	return func(address string) (net.Conn, error) {
 		conn, err := net.Dial("tcp", address)
@@ -508,8 +521,8 @@ func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 }
 
 var (
-	re1 = regexp.MustCompile(`\r?\n`)  // nolint gochecknoglobals
-	re2 = regexp.MustCompile(`\s{2,}`) // nolint gochecknoglobals
+	re1 = regexp.MustCompile(`\r?\n`)  // nolint:gochecknoglobals
+	re2 = regexp.MustCompile(`\s{2,}`) // nolint:gochecknoglobals
 )
 
 func line(s string) string {
@@ -519,7 +532,7 @@ func line(s string) string {
 	return s
 }
 
-// nolint gochecknoglobals
+// nolint:gochecknoglobals
 var (
 	lastResponse         string
 	lastResponseLock     sync.Mutex
@@ -565,7 +578,7 @@ func (a *App) setupResponsePrinter() {
 }
 
 // HandleInterrupt handles Ctrl+C to exit after calling f.
-// nolint gomnd
+// nolint:gomnd
 func HandleInterrupt(f func(), exitRightNow bool) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt)
@@ -588,7 +601,7 @@ func HandleMaxProcs() {
 	}
 }
 
-// IfElse return then if condition is true,  else els if false
+// IfElse return then if condition is true,  else els if false.
 func IfElse(condition bool, then, els string) string {
 	if condition {
 		return then
@@ -597,7 +610,7 @@ func IfElse(condition bool, then, els string) string {
 	return els
 }
 
-// FileToLines read file into lines
+// FileToLines read file into lines.
 func FileToLines(filePath string) (lines []string, err error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -613,7 +626,7 @@ func FileToLines(filePath string) (lines []string, err error) {
 	return lines, scanner.Err()
 }
 
-// MustOpen open file successfully or panic
+// MustOpen open file successfully or panic.
 func MustOpen(f string) *os.File {
 	r, err := os.Open(f)
 	if err != nil {
@@ -624,7 +637,7 @@ func MustOpen(f string) *os.File {
 }
 
 // ReadUploadMultipartFile read file filePath for upload in multipart,
-// return multipart content, form data content type and error
+// return multipart content, form data content type and error.
 func ReadUploadMultipartFile(filename, filePath string) (imageBytes []byte, contentType string, err error) {
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
