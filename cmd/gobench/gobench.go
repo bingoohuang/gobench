@@ -40,6 +40,7 @@ type App struct {
 	method           string
 	duration         string
 	urls             string
+	postData         string
 	postDataFilePath string
 	uploadFilePath   string
 
@@ -88,6 +89,7 @@ func (a *App) Init() {
 	flag.BoolVar(&a.uploadRandImg, "randomPng", false, "Upload random png images by file upload")
 	flag.StringVar(&a.fixedImgSize, "fixedImgSize", "", "Upload fixed img size (eg. 44kB, 17MB)")
 	flag.StringVar(&a.postDataFilePath, "postDataFile", "", "HTTP POST data file path")
+	flag.StringVar(&a.postData, "postData", "", "HTTP POST data")
 	flag.StringVar(&a.uploadFilePath, "f", "", "HTTP upload file path")
 	flag.StringVar(&a.method, "method", "", "HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc")
 	flag.StringVar(&a.duration, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
@@ -275,7 +277,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 }
 
 func (a *App) dealPostDataFilePath(c *Conf) {
-	if a.postDataFilePath == "" {
+	if a.postDataFilePath == "" && a.postData == "" {
 		return
 	}
 
@@ -283,13 +285,17 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 
 	a.tryMethod(c, http.MethodPost)
 
-	c.postData, err = ioutil.ReadFile(a.postDataFilePath)
+	if a.postData != "" {
+		c.postData = []byte(a.postData)
+	} else if a.postDataFilePath != "" {
+		c.postData, err = ioutil.ReadFile(a.postDataFilePath)
+	}
 
 	if err != nil {
 		log.Fatalf("Error in ioutil.ReadFile for file path: %s Error: %v", a.postDataFilePath, err)
 	}
 
-	if a.contentType == "" {
+	if a.contentType == "" && len(c.postData) > 0 {
 		firstByte := c.postData[0]
 		if firstByte == '{' || firstByte == '[' {
 			c.contentType = "application/json; charset=utf-8"
