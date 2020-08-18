@@ -626,18 +626,26 @@ var (
 )
 
 func (a *App) setupResponsePrinter() {
-	var f func(a string)
+	var f func(a string, direct bool)
 
 	switch r := a.printResult; r {
 	case "":
 		return
 	case "0":
-		f = func(a string) {
-			_, _ = fmt.Fprint(os.Stdout, line(a))
+		f = func(a string, direct bool) {
+			if direct {
+				_, _ = fmt.Fprint(os.Stdout, a)
+			} else {
+				_, _ = fmt.Fprint(os.Stdout, line(a))
+			}
 		}
 	case "1":
-		f = func(a string) {
-			_, _ = fmt.Fprintln(os.Stdout, line(a))
+		f = func(a string, direct bool) {
+			if direct {
+				_, _ = fmt.Fprint(os.Stdout, a)
+			} else {
+				_, _ = fmt.Fprintln(os.Stdout, line(a))
+			}
 		}
 	default:
 		lf, err := os.OpenFile(r, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
@@ -646,7 +654,13 @@ func (a *App) setupResponsePrinter() {
 		}
 
 		a.responsePrinterFile = lf
-		f = func(s string) { _, _ = a.responsePrinterFile.WriteString(s + "\n") }
+		f = func(s string, direct bool) {
+			if direct {
+				_, _ = a.responsePrinterFile.WriteString(s)
+			} else {
+				_, _ = a.responsePrinterFile.WriteString(s + "\n")
+			}
+		}
 	}
 
 	lastResponseCh = make(chan string, 10000)
@@ -655,9 +669,9 @@ func (a *App) setupResponsePrinter() {
 		lastResponseThrottle := MakeThrottle(1 * time.Second)
 		for a := range lastResponseCh {
 			if lastResponse == "" || lastResponse != a {
-				f(a)
+				f(a, false)
 			} else if lastResponseThrottle.Allow() {
-				_, _ = fmt.Fprint(os.Stdout, ".")
+				f(".", true)
 			}
 
 			lastResponse = a
