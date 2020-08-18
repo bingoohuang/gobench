@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -19,7 +20,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -58,10 +58,13 @@ type App struct {
 	uploadFileName string
 	fixedImgSize   string
 	contentType    string
+	think          string
 
 	connectionChan      chan bool
 	responsePrinter     func(s string)
 	responsePrinterFile *os.File
+	thinkMin            time.Duration
+	thinkMax            time.Duration
 }
 
 // Conf for gobench.
@@ -98,12 +101,87 @@ func (a *App) Init() {
 	flag.StringVar(&a.authHeader, "authHeader", "", "Authorization header")
 	flag.StringVar(&a.uploadFileName, "fileName", "file", "Upload file name")
 	flag.StringVar(&a.contentType, "contentType", "", "Content-Type, eg, json, plain, or other full name")
+	flag.StringVar(&a.think, "think", "", "think time, eg. 1s, 100ms, 100-200ms and etc.(Valid time units are ns, us (or µs), ms, s, m, h)")
 
 	flag.Parse()
 
 	rand.Seed(time.Now().UnixNano())
 
+	if err := a.parseThinkTime(); err != nil {
+		panic(err)
+	}
+
 	a.setupResponsePrinter()
+}
+
+func (a *App) thinking() {
+	if a.thinkMax == 0 {
+		return
+	}
+
+	var thinkTime time.Duration
+	if a.thinkMax == a.thinkMin {
+		thinkTime = a.thinkMin
+	} else {
+		thinkTime = time.Duration(rand.Int31n(int32(a.thinkMax-a.thinkMin))) + a.thinkMin
+	}
+
+	a.responsePrinter("think " + thinkTime.String() + "...")
+
+	time.Sleep(thinkTime)
+}
+
+func (a *App) parseThinkTime() (err error) {
+	if a.think == "" {
+		return nil
+	}
+
+	rangePos := strings.Index(a.think, "-")
+	if rangePos < 0 {
+		if a.thinkMin, err = time.ParseDuration(a.think); err != nil {
+			return err
+		}
+
+		a.thinkMax = a.thinkMin
+		return
+	}
+
+	min := a.think[0:rangePos]
+	max := a.think[rangePos+1:]
+	if a.thinkMax, err = time.ParseDuration(max); err != nil {
+		return err
+	}
+
+	if min == "" {
+		a.thinkMin = 0
+		return
+	}
+
+	if regexp.MustCompile(`^\d+$`).MatchString(min) {
+		min += findUnit(max)
+	}
+
+	if a.thinkMin, err = time.ParseDuration(min); err != nil {
+		return err
+	}
+
+	if a.thinkMin > a.thinkMax {
+		return errors.Errorf("min think time should be less than max")
+	}
+
+	return nil
+}
+
+func findUnit(s string) string {
+	pos := strings.LastIndexFunc(s, func(r rune) bool {
+		return r >= '0' && r <= '9'
+	})
+
+	if pos < 0 {
+		return s
+	}
+
+	return s[pos+1:]
 }
 
 func main() {
@@ -387,6 +465,10 @@ func (a *App) client(stopChan chan int, resultChan chan requestResult, configura
 	for ; !a.exitRequested && (requests == 0 || i < requests); i++ {
 		url := configuration.urls[urlIndex]
 
+		if i > 0 {
+			a.thinking()
+		}
+
 		a.doRequest(resultChan, configuration, url)
 
 		if urlIndex++; urlIndex >= len(configuration.urls) {
@@ -540,9 +622,7 @@ func line(s string) string {
 
 // nolint:gochecknoglobals
 var (
-	lastResponse         string
-	lastResponseLock     sync.Mutex
-	lastResponseThrottle = MakeThrottle(1 * time.Second)
+	lastResponseCh chan string
 )
 
 func (a *App) setupResponsePrinter() {
@@ -569,17 +649,23 @@ func (a *App) setupResponsePrinter() {
 		f = func(s string) { _, _ = a.responsePrinterFile.WriteString(s + "\n") }
 	}
 
-	a.responsePrinter = func(a string) {
-		lastResponseLock.Lock()
-		defer lastResponseLock.Unlock()
-
-		if lastResponse == "" || lastResponse != a {
-			f(a)
+	lastResponseCh = make(chan string, 10000)
+	go func() {
+		lastResponse := ""
+		lastResponseThrottle := MakeThrottle(1 * time.Second)
+		for a := range lastResponseCh {
+			if lastResponse == "" || lastResponse != a {
+				f(a)
+			} else if lastResponseThrottle.Allow() {
+				_, _ = fmt.Fprint(os.Stdout, ".")
+			}
 
 			lastResponse = a
-		} else if lastResponseThrottle.Allow() {
-			f(".")
 		}
+	}()
+
+	a.responsePrinter = func(a string) {
+		lastResponseCh <- a
 	}
 }
 

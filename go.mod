@@ -9,5 +9,6 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.1
 	github.com/hashicorp/go-retryablehttp v0.6.4
 	github.com/klauspost/compress v1.9.2 // indirect
+	github.com/pkg/errors v0.8.1
 	github.com/valyala/fasthttp v1.6.0
 )
