@@ -147,6 +147,8 @@ gobench usage:
             Read timeout (in milliseconds) (default 5000)
     -tw int
             Write timeout (in milliseconds) (default 5000)
+    -think string
+            Think time, eg. 1s, 100ms, 100-200ms and etc.(Valid time units are ns, us (or µs), ms, s, m, h)
     -u string
             URL list (comma seperated)
     -uf string

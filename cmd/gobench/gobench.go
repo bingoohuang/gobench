@@ -101,7 +101,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.authHeader, "authHeader", "", "Authorization header")
 	flag.StringVar(&a.uploadFileName, "fileName", "file", "Upload file name")
 	flag.StringVar(&a.contentType, "contentType", "", "Content-Type, eg, json, plain, or other full name")
-	flag.StringVar(&a.think, "think", "", "think time, eg. 1s, 100ms, 100-200ms and etc.(Valid time units are ns, us (or µs), ms, s, m, h)")
+	flag.StringVar(&a.think, "think", "", "Think time, eg. 1s, 100ms, 100-200ms and etc. (Valid time units are ns, us or µs, ms, s, m, h)")
 
 	flag.Parse()
 
