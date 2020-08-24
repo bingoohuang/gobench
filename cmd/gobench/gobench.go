@@ -102,8 +102,14 @@ func (a *App) Init() {
 	flag.StringVar(&a.uploadFileName, "fileName", "file", "Upload file name")
 	flag.StringVar(&a.contentType, "contentType", "", "Content-Type, eg, json, plain, or other full name")
 	flag.StringVar(&a.think, "think", "", "Think time, eg. 1s, 100ms, 100-200ms and etc. (Valid time units are ns, us or µs, ms, s, m, h)")
+	version := flag.Bool("version", false, "Print version")
 
 	flag.Parse()
+
+	if *version {
+		fmt.Println("v1.0.1 at 2020-08-24 11:42:27")
+		os.Exit(0)
+	}
 
 	rand.Seed(time.Now().UnixNano())
 
