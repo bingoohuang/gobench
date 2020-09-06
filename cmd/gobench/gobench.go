@@ -33,8 +33,10 @@ import (
 
 // App ...
 type App struct {
-	requests    int
-	threads     int
+	requests      int
+	requestsTotal int
+
+	goroutines  int
 	connections int
 
 	method           string
@@ -83,9 +85,13 @@ type Conf struct {
 
 // Init ...
 func (a *App) Init() {
-	flag.IntVar(&a.requests, "r", 0, "Number of requests per client")
 	flag.IntVar(&a.connections, "c", 100, "Number of connections")
-	flag.IntVar(&a.threads, "t", 100, "Number of concurrent threads")
+	flag.IntVar(&a.goroutines, "t", 100, "Number of concurrent goroutines")
+	flag.IntVar(&a.requests, "r", 0, "Number of requests per goroutine")
+	flag.IntVar(&a.requestsTotal, "rr", 0, "Number of total requests")
+
+	// only one should be provided: [requests|duration]
+	flag.StringVar(&a.duration, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
 	flag.StringVar(&a.urls, "u", "", "URL list (comma separated), or @URL's file path (line separated)")
 	flag.BoolVar(&a.keepAlive, "keepAlive", true, "Do HTTP keep-alive")
 	flag.StringVar(&a.printResult, "p", "", "0:Print http response; 1:with extra newline; x.log: log file")
@@ -95,7 +101,6 @@ func (a *App) Init() {
 	flag.StringVar(&a.postData, "postData", "", "HTTP POST data")
 	flag.StringVar(&a.uploadFilePath, "f", "", "HTTP upload file path")
 	flag.StringVar(&a.method, "method", "", "HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc")
-	flag.StringVar(&a.duration, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
 	flag.UintVar(&a.writeTimeout, "writeTimeout", 5000, "Write timeout (in milliseconds)")
 	flag.UintVar(&a.readTimeout, "readTimeout", 5000, "Read timeout (in milliseconds)")
 	flag.StringVar(&a.authHeader, "authHeader", "", "Authorization header")
@@ -204,13 +209,11 @@ func main() {
 
 	startTime := time.Now()
 
-	HandleInterrupt(func() {
-		app.exitRequested = true
-	}, false)
+	HandleInterrupt(func() { app.exitRequested = true }, false)
 	HandleMaxProcs()
 
 	c := app.NewConfiguration()
-	fmt.Printf("Dispatching %d threads (goroutines)\n", app.threads)
+	fmt.Printf("Dispatching %d goroutines\n", app.goroutines)
 
 	resultChan := make(chan requestResult)
 	totalReqsChan := make(chan int)
@@ -219,9 +222,9 @@ func main() {
 	var rr requestResult
 	go stating(resultChan, &rr, totalReqsChan, statComplete)
 
-	requestsChan := make(chan int, app.threads)
+	requestsChan := make(chan int, app.goroutines)
 
-	for i := 0; i < app.threads; i++ {
+	for i := 0; i < app.goroutines; i++ {
 		go app.client(requestsChan, resultChan, c)
 	}
 
@@ -251,7 +254,7 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 
 func (a *App) waitResults(requestsChan chan int, totalReqsChan chan int, statComplete chan bool) int {
 	totalRequests := 0
-	for i := 0; i < a.threads; i++ {
+	for i := 0; i < a.goroutines; i++ {
 		totalRequests += <-requestsChan
 	}
 
@@ -399,12 +402,20 @@ func (a *App) period(c *Conf) {
 		log.Fatal(err)
 	}
 
+	if a.requests > 0 && a.requestsTotal > 0 {
+		log.Fatalf("only one should be provided: [requests|requestsTotal]")
+	}
+
+	if a.requestsTotal > 0 {
+		a.requests = a.requestsTotal / a.connections / a.goroutines
+	}
+
 	if a.requests == 0 && period == 0 {
-		log.Fatalf("requests or duration must be provided")
+		log.Fatalf("requests|requestsTotal or duration must be provided")
 	}
 
 	if a.requests != 0 && period != 0 {
-		log.Fatalf("only one should be provided: [requests|duration]")
+		log.Fatalf("only one should be provided: [requests|requestsTotal|duration]")
 	}
 
 	if period == 0 {
@@ -463,21 +474,19 @@ func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, ima
 	return
 }
 
-func (a *App) client(stopChan chan int, resultChan chan requestResult, configuration *Conf) {
-	urlIndex := rand.Intn(len(configuration.urls))
-	requests := configuration.requests
+func (a *App) client(stopChan chan int, resultChan chan requestResult, conf *Conf) {
+	urlIndex := rand.Intn(len(conf.urls))
+	requests := conf.requests
 
 	i := 0
 	for ; !a.exitRequested && (requests == 0 || i < requests); i++ {
-		url := configuration.urls[urlIndex]
-
 		if i > 0 {
 			a.thinking()
 		}
 
-		a.doRequest(resultChan, configuration, url)
+		a.doRequest(resultChan, conf, conf.urls[urlIndex])
 
-		if urlIndex++; urlIndex >= len(configuration.urls) {
+		if urlIndex++; urlIndex >= len(conf.urls) {
 			urlIndex = 0
 		}
 	}
