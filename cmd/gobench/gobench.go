@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"text/tabwriter"
 	"time"
 
 	"github.com/bingoohuang/golang-trial/randimg"
@@ -80,7 +81,8 @@ type Conf struct {
 	authHeader  string
 	contentType string
 
-	myClient fasthttp.Client
+	myClient      fasthttp.Client
+	firstRequests int
 }
 
 // Init ...
@@ -225,7 +227,12 @@ func main() {
 	requestsChan := make(chan int, app.goroutines)
 
 	for i := 0; i < app.goroutines; i++ {
-		go app.client(requestsChan, resultChan, c)
+		reqs := c.requests
+		if i == 0 {
+			reqs = c.firstRequests
+		}
+
+		go app.client(requestsChan, resultChan, c, reqs)
 	}
 
 	fmt.Println("Waiting for results...")
@@ -240,16 +247,21 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 	elapsedSeconds := elapsed.Seconds()
 
 	fmt.Println()
-	fmt.Printf("Requests:                   %10d hits\n", totalRequests)
-	fmt.Printf("Successful requests:        %10d hits\n", rr.success)
-	fmt.Printf("Network failed:             %10d hits\n", rr.networkFailed)
-	fmt.Printf("Bad requests failed (!2xx): %10d hits\n", rr.badFailed)
-	fmt.Printf("Successful requests rate:   %10d hits/sec\n", uint64(float64(rr.success)/elapsedSeconds))
-	fmt.Printf("Read throughput:            %10s/sec\n",
+
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
+
+	fmt.Fprintf(w, "Total Requests:\t%d hits\n", totalRequests)
+	fmt.Fprintf(w, "Successful requests:\t%d hits\n", rr.success)
+	fmt.Fprintf(w, "Network failed:\t%d hits\n", rr.networkFailed)
+	fmt.Fprintf(w, "Bad requests(!2xx):\t%d hits\n", rr.badFailed)
+	fmt.Fprintf(w, "Successful requests rate:\t%d hits/sec\n", uint64(float64(rr.success)/elapsedSeconds))
+	fmt.Fprintf(w, "Read throughput:\t%s/sec\n",
 		humanize.IBytes(uint64(float64(a.readThroughput)/elapsedSeconds)))
-	fmt.Printf("Write throughput:           %10s/sec\n",
+	fmt.Fprintf(w, "Write throughput:\t%s/sec\n",
 		humanize.IBytes(uint64(float64(a.writeThroughput)/elapsedSeconds)))
-	fmt.Printf("Test time:                  %10s\n", elapsed.String())
+	fmt.Fprintf(w, "Test time:\t%s\n", elapsed.String())
+	w.Flush()
 }
 
 func (a *App) waitResults(requestsChan chan int, totalReqsChan chan int, statComplete chan bool) int {
@@ -406,15 +418,18 @@ func (a *App) period(c *Conf) {
 		log.Fatalf("only one should be provided: [requests|requestsTotal]")
 	}
 
+	c.firstRequests = a.requests
+
 	if a.requestsTotal > 0 {
-		a.requests = a.requestsTotal / a.connections / a.goroutines
+		c.requests = a.requestsTotal / a.goroutines
+		c.firstRequests = a.requestsTotal - c.requests*(a.goroutines-1)
 	}
 
-	if a.requests == 0 && period == 0 {
+	if c.requests == 0 && period == 0 {
 		log.Fatalf("requests|requestsTotal or duration must be provided")
 	}
 
-	if a.requests != 0 && period != 0 {
+	if c.requests != 0 && period != 0 {
 		log.Fatalf("only one should be provided: [requests|requestsTotal|duration]")
 	}
 
@@ -474,12 +489,11 @@ func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, ima
 	return
 }
 
-func (a *App) client(stopChan chan int, resultChan chan requestResult, conf *Conf) {
+func (a *App) client(exitChan chan int, resultChan chan requestResult, conf *Conf, req int) {
 	urlIndex := rand.Intn(len(conf.urls))
-	requests := conf.requests
 
 	i := 0
-	for ; !a.exitRequested && (requests == 0 || i < requests); i++ {
+	for ; !a.exitRequested && (req == 0 || i < req); i++ {
 		if i > 0 {
 			a.thinking()
 		}
@@ -491,7 +505,7 @@ func (a *App) client(stopChan chan int, resultChan chan requestResult, conf *Con
 		}
 	}
 
-	stopChan <- i
+	exitChan <- i
 }
 
 func (a *App) doRequest(resultChan chan requestResult, c *Conf, url string) {
