@@ -68,12 +68,12 @@ HTTP upload server benchmark in few languages/frameworks and gobench tool
 
 ## Installing
 
-`go get github.com/bingoohuang/http-upload-benchmark/...`
+`go get github.com/bingoohuang/gobench/...`
 
 ## Usage
 
 ```bash
-$ go get -u github.com/bingoohuang/http-upload-benchmark/cmd/go-upload-server
+$ go get -u github.com/bingoohuang/gobench/cmd/go-upload-server
 $ go-upload-server -sampleFileSize 1MiB
 fixFile /tmp/fix1048576
 $ ll -lh /tmp/fix1048576
