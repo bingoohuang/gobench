@@ -1,7 +1,70 @@
-# http-upload-benchmark
+# gobench
+
+a HTTP/HTTPS load testing and benchmarking tool supporting http uploading. Originated from [gobench](https://github.com/cmpxchg16/gobench). 
+
+```bash
+$ gobench -u http://127.0.0.1:5003/api/demo -rr 1000
+Dispatching 100 goroutines
+Waiting for results...
+
+Total Requests:                 1000 hits
+Successful requests:            1000 hits
+Network failed:                 0 hits
+Bad requests(!2xx):             0 hits
+Successful requests rate:       10754 hits/sec
+Read throughput:                2.9 MiB/sec
+Write throughput:               987 KiB/sec
+Test time:                      92.985453ms
+
+$ gobench -h                                        
+Usage of gobench:
+  -authHeader string
+        Authorization header
+  -c int
+        Number of connections (default 100)
+  -contentType string
+        Content-Type, eg, json, plain, or other full name
+  -d string
+        Duration of time (eg 10s, 10m, 2h45m) (default "0s")
+  -f string
+        HTTP upload file path
+  -fileName string
+        Upload file name (default "file")
+  -fixedImgSize string
+        Upload fixed img size (eg. 44kB, 17MB)
+  -keepAlive
+        Do HTTP keep-alive (default true)
+  -method string
+        HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc
+  -p string
+        0:Print http response; 1:with extra newline; x.log: log file
+  -postData string
+        HTTP POST data
+  -postDataFile string
+        HTTP POST data file path
+  -r int
+        Number of requests per goroutine
+  -randomPng
+        Upload random png images by file upload
+  -readTimeout uint
+        Read timeout (in milliseconds) (default 5000)
+  -rr int
+        Number of total requests
+  -t int
+        Number of concurrent goroutines (default 100)
+  -think string
+        Think time, eg. 1s, 100ms, 100-200ms and etc. (Valid time units are ns, us or µs, ms, s, m, h)
+  -u string
+        URL list (comma separated), or @URL's file path (line separated)
+  -version
+        Print version
+  -writeTimeout uint
+        Write timeout (in milliseconds) (default 5000)
+```
+
 HTTP upload server benchmark in few languages/frameworks and gobench tool
 
-# Golang upload server
+## Golang upload server
 
 ## Installing
 
@@ -103,55 +166,3 @@ Environment:
 | 总体     | 20000     | 61      | 36     | 133      | 183      | 311      | 7   | 506 | 0.000%  | 319.89252  | 35.93           | 655284.50   | 
 
 
-# gobench
-
-It is a HTTP/HTTPS load testing and benchmarking tool supporting http uploading file.
-
-Originated from [gobench](https://github.com/cmpxchg16/gobench). 
-
-    bingoo@localhost ~/G/h/gobench> ./gobench -up http://127.0.0.1:8811/upload  -c 100 -p /tmp/fix5242880  -r 1000
-    Dispatching 100 clients
-    Waiting for results...
-
-    Requests:                           100000 hits
-    Successful requests:                 99651 hits
-    Network failed:                        349 hits
-    Bad requests failed (!2xx):              0 hits
-    Successful requests rate:              153 hits/sec
-    Read throughput:                     11498 bytes/sec
-    Write throughput:                803968443 bytes/sec
-    Test time:                             650 sec
-
-gobench usage:
-
-    bingoo@localhost ~/G/h/gobench> ./gobench
-    Usage of ./gobench:
-    -auth string
-            Authorization header
-    -c int
-            Number of concurrent clients (default 100)
-    -d string
-            HTTP POST data file path
-    -fn string
-            Upload file name (default "file")
-    -fp string
-            HTTP upload file path
-    -fr
-            Upload random png images by file upload
-    -k	Do HTTP keep-alive (default true)
-    -r int
-            Number of requests per client (default -1)
-    -t int
-            Period of time (in seconds) (default -1)
-    -tr int
-            Read timeout (in milliseconds) (default 5000)
-    -tw int
-            Write timeout (in milliseconds) (default 5000)
-    -think string
-            Think time, eg. 1s, 100ms, 100-200ms and etc.(Valid time units are ns, us (or µs), ms, s, m, h)
-    -u string
-            URL list (comma seperated)
-    -uf string
-            URL's file path (line seperated)
-    -ur
-            select url in Rand-Robin  (default true)
