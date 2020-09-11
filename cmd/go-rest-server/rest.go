@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -18,6 +19,22 @@ func main() {
 	http.HandleFunc("/dump", func(w http.ResponseWriter, r *http.Request) {
 		dump, _ := httputil.DumpRequest(r, true)
 		_, _ = w.Write(dump)
+	})
+
+	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+		contentType := r.Header.Get("Content-Type")
+		if contentType != "" {
+			w.Header().Set("Content-Type", contentType)
+		}
+
+		bytes, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		w.Write(bytes)
 	})
 
 	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
