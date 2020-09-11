@@ -12,7 +12,7 @@ func main() {
 	flag.Parse()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("起开，表烦我。思考人生，没空理你。未生我时谁是我，生我只是我是谁？"))
+		w.Write([]byte("起开，表烦我。思考人生，没空理你。未生我时谁是我，生我之时我是谁？"))
 	})
 
 	http.HandleFunc("/dump", func(w http.ResponseWriter, r *http.Request) {
