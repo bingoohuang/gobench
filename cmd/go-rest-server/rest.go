@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"net/http/httputil"
 )
 
 func main() {
@@ -12,6 +13,11 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("Hello\n"))
+	})
+
+	http.HandleFunc("/dump", func(w http.ResponseWriter, r *http.Request) {
+		dump, _ := httputil.DumpRequest(r, true)
+		_, _ = w.Write(dump)
 	})
 
 	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
