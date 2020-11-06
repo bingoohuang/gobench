@@ -13,7 +13,7 @@ func main() {
 	flag.Parse()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("起开，表烦我。思考人生，没空理你。未生我时谁是我，生我之时我是谁？"))
+		w.Write([]byte("起开，表烦我。思考人生，没空理你。未生我时谁是我，生我之时我是谁？" + r.URL.Path))
 	})
 
 	http.HandleFunc("/dump", func(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +35,10 @@ func main() {
 		}
 
 		w.Write(bytes)
+	})
+
+	http.HandleFunc("/port", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("port" + *addr + "\n"))
 	})
 
 	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
