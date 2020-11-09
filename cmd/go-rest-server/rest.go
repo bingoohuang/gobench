@@ -1,8 +1,8 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -13,39 +13,29 @@ func main() {
 	flag.Parse()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("起开，表烦我。思考人生，没空理你。未生我时谁是我，生我之时我是谁？" + r.URL.Path))
-	})
-
-	http.HandleFunc("/dump", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		dump, _ := httputil.DumpRequest(r, true)
-		_, _ = w.Write(dump)
-	})
-
-	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		contentType := r.Header.Get("Content-Type")
-		if contentType != "" {
-			w.Header().Set("Content-Type", contentType)
-		}
-
-		bytes, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
+		bytes, _ := json.Marshal(struct {
+			Path   string
+			Method string
+			Addr   string
+			Buddha string
+			Detail string
+		}{
+			Path:   r.URL.Path,
+			Method: r.Method,
+			Addr:   *addr,
+			Buddha: "起开，表烦我。思考人生，没空理你。未生我时谁是我，生我之时我是谁？",
+			Detail: string(dump),
+		})
 		w.Write(bytes)
 	})
 
-	http.HandleFunc("/port", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("port" + *addr + "\n"))
-	})
-
-	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK\n"))
 	})
 
-	http.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "my own error message", http.StatusInternalServerError)
 	})
 
