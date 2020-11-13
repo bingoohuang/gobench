@@ -414,10 +414,6 @@ func (a *App) period(c *Conf) {
 		log.Fatal(err)
 	}
 
-	if a.requests > 0 && a.requestsTotal > 0 {
-		log.Fatalf("only one should be provided: [requests|requestsTotal]")
-	}
-
 	c.firstRequests = a.requests
 
 	if a.requestsTotal > 0 {
@@ -426,11 +422,11 @@ func (a *App) period(c *Conf) {
 	}
 
 	if c.requests == 0 && period == 0 {
-		log.Fatalf("requests|requestsTotal or duration must be provided")
+		period = 10 * time.Second
 	}
 
-	if c.requests != 0 && period != 0 {
-		log.Fatalf("only one should be provided: [requests|requestsTotal|duration]")
+	if c.requests != 0 {
+		period = 0
 	}
 
 	if period == 0 {
