@@ -31,6 +31,16 @@ func main() {
 		w.Write(bytes)
 	})
 
+	http.HandleFunc("/json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		bytes, _ := json.Marshal(struct {
+			Status int
+		}{
+			Status: 200,
+		})
+		w.Write(bytes)
+	})
+
 	http.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK\n"))
 	})

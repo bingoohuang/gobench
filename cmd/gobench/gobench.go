@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/Knetic/govaluate"
 	"github.com/pkg/errors"
+	"github.com/tidwall/gjson"
 	"io"
 	"io/ioutil"
 	"log"
@@ -63,6 +65,9 @@ type App struct {
 	contentType    string
 	think          string
 
+	// 返回JSON时的判断是否调用成功的表达式
+	cond *govaluate.EvaluableExpression
+
 	connectionChan      chan bool
 	responsePrinter     func(s string)
 	responsePrinterFile *os.File
@@ -109,9 +114,12 @@ func (a *App) Init() {
 	flag.StringVar(&a.uploadFileName, "fileName", "file", "Upload file name")
 	flag.StringVar(&a.contentType, "contentType", "", "Content-Type, eg, json, plain, or other full name")
 	flag.StringVar(&a.think, "think", "", "Think time, eg. 1s, 100ms, 100-200ms and etc. (Valid time units are ns, us or µs, ms, s, m, h)")
+	cond := flag.String("cond", "", "OK condition like 'status == 200' for json output")
 	version := flag.Bool("version", false, "Print version")
 
 	flag.Parse()
+
+	a.parseCond(*cond)
 
 	if *version {
 		fmt.Println("v1.0.2 at 2020-09-07 09:46:32")
@@ -125,6 +133,21 @@ func (a *App) Init() {
 	}
 
 	a.setupResponsePrinter()
+}
+
+func (a *App) parseCond(cond string) {
+	s := strings.TrimSpace(cond)
+	if s == "" {
+		return
+	}
+
+	expr, err := govaluate.NewEvaluableExpression(s)
+	if err != nil {
+		fmt.Printf("Bad expression: %s Error: %v", s, err)
+		os.Exit(1)
+	}
+
+	a.cond = expr
 }
 
 func (a *App) thinking() {
@@ -254,7 +277,11 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 	fmt.Fprintf(w, "Total Requests:\t%d hits\n", totalRequests)
 	fmt.Fprintf(w, "Successful requests:\t%d hits\n", rr.success)
 	fmt.Fprintf(w, "Network failed:\t%d hits\n", rr.networkFailed)
-	fmt.Fprintf(w, "Bad requests(!2xx):\t%d hits\n", rr.badFailed)
+	if a.cond == nil {
+		fmt.Fprintf(w, "Bad requests(!2xx):\t%d hits\n", rr.badFailed)
+	} else {
+		fmt.Fprintf(w, "Bad requests(!2xx/%s):\t%d hits\n", a.cond, rr.badFailed)
+	}
 	fmt.Fprintf(w, "Successful requests rate:\t%d hits/sec\n", uint64(float64(rr.success)/elapsedSeconds))
 	fmt.Fprintf(w, "Read throughput:\t%s/sec\n",
 		humanize.IBytes(uint64(float64(a.readThroughput)/elapsedSeconds)))
@@ -458,9 +485,10 @@ func (a *App) period(c *Conf) {
 
 // nolint:gomnd
 func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, imageFile string) {
-	var err error
-
-	var size int64
+	var (
+		err  error
+		size int64
+	)
 
 	if imageSize == "" {
 		size = (rand.Int63n(4) + 1) << 20 //  << 20 means MiB
@@ -549,17 +577,24 @@ func (a *App) do(result chan requestResult, cnf *Conf, url, method, contentType,
 	err := cnf.myClient.Do(req, resp)
 	statusCode := resp.StatusCode()
 
-	var rr requestResult
-
-	var resultDesc string
+	var (
+		rr         requestResult
+		resultDesc string
+	)
 
 	switch {
 	case err != nil:
 		rr.networkFailed = 1
 		resultDesc = "[x] " + err.Error()
 	case statusCode < http.StatusBadRequest:
-		rr.success = 1
-		resultDesc = "[√]"
+		if a.isOK(resp) {
+			rr.success = 1
+			resultDesc = "[√]"
+		} else {
+			rr.badFailed = 1
+			resultDesc = "[x]"
+		}
+
 	default:
 		rr.badFailed = 1
 		resultDesc = "[x]"
@@ -568,6 +603,32 @@ func (a *App) do(result chan requestResult, cnf *Conf, url, method, contentType,
 	a.printResponse(fileName, resultDesc, statusCode, resp)
 
 	result <- rr
+}
+
+func (a *App) isOK(resp *fasthttp.Response) bool {
+	if a.cond == nil {
+		return true
+	}
+
+	body := resp.Body()
+	if !gjson.ValidBytes(body) {
+		return false
+	}
+
+	vars := a.cond.Vars()
+	parameters := make(map[string]interface{}, len(vars))
+	for _, v := range vars {
+		jsonValue := gjson.GetBytes(body, v)
+		parameters[v] = jsonValue.Value()
+	}
+
+	result, err := a.cond.Evaluate(parameters)
+	if err != nil {
+		return false
+	}
+
+	yes, ok := result.(bool)
+	return yes && ok
 }
 
 func (a *App) printResponse(fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
