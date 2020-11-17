@@ -238,7 +238,8 @@ func main() {
 	HandleMaxProcs()
 
 	c := app.NewConfiguration()
-	fmt.Printf("Dispatching %d goroutines\n", app.goroutines)
+	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines,
+		startTime.Format("2006-01-02 15:04:05.000"))
 
 	resultChan := make(chan requestResult)
 	totalReqsChan := make(chan int)
@@ -266,7 +267,8 @@ func main() {
 }
 
 func (a *App) printResults(startTime time.Time, totalRequests int, rr requestResult) {
-	elapsed := time.Since(startTime)
+	endTime := time.Now()
+	elapsed := endTime.Sub(startTime)
 	elapsedSeconds := elapsed.Seconds()
 
 	fmt.Println()
@@ -287,7 +289,8 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 		humanize.IBytes(uint64(float64(a.readThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Write throughput:\t%s/sec\n",
 		humanize.IBytes(uint64(float64(a.writeThroughput)/elapsedSeconds)))
-	fmt.Fprintf(w, "Test time:\t%s\n", elapsed.String())
+	fmt.Fprintf(w, "Test time:\t%s(%s-%s)\n", elapsed.Round(time.Millisecond).String(),
+		startTime.Format("2006-01-02 15:04:05.000"), endTime.Format("15:04:05.000"))
 	w.Flush()
 }
 
