@@ -8,6 +8,7 @@ import (
 	"github.com/Knetic/govaluate"
 	"github.com/pkg/errors"
 	"github.com/tidwall/gjson"
+	"golang.org/x/net/proxy"
 	"io"
 	"io/ioutil"
 	"log"
@@ -15,6 +16,7 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -64,6 +66,7 @@ type App struct {
 	fixedImgSize   string
 	contentType    string
 	think          string
+	proxy          string
 
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
@@ -113,6 +116,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.authHeader, "authHeader", "", "Authorization header")
 	flag.StringVar(&a.uploadFileName, "fileName", "file", "Upload file name")
 	flag.StringVar(&a.contentType, "contentType", "", "Content-Type, eg, json, plain, or other full name")
+	flag.StringVar(&a.proxy, "proxy", "", "proxy of request, like socks5://127.0.0.1:1080 http://127.0.0.1:1080")
 	flag.StringVar(&a.think, "think", "", "Think time, eg. 1s, 100ms, 100-200ms and etc. (Valid time units are ns, us or µs, ms, s, m, h)")
 	cond := flag.String("cond", "", "OK condition like 'status == 200' for json output")
 	version := flag.Bool("version", false, "Print version")
@@ -688,7 +692,12 @@ func (myConn *MyConn) Write(b []byte) (n int, err error) {
 // MyDialer create Dial function.
 func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 	return func(address string) (net.Conn, error) {
-		conn, err := net.Dial("tcp", address)
+		dialer, err := NewProxyConn(a.proxy)
+		if err != nil {
+			return nil, err
+		}
+
+		conn, err := dialer.Dial("tcp", address)
 		if err != nil {
 			return nil, err
 		}
@@ -698,8 +707,8 @@ func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 }
 
 var (
-	re1 = regexp.MustCompile(`\r?\n`)  // nolint:gochecknoglobals
-	re2 = regexp.MustCompile(`\s{2,}`) // nolint:gochecknoglobals
+	re1 = regexp.MustCompile(`\r?\n`)
+	re2 = regexp.MustCompile(`\s{2,}`)
 )
 
 func line(s string) string {
@@ -898,4 +907,89 @@ func (t *Throttle) Allow() bool {
 	default:
 		return false
 	}
+}
+
+// Return based on proxy url
+func NewProxyConn(proxyUrl string) (ProxyConn, error) {
+	u, err := url.Parse(proxyUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	switch u.Scheme {
+	case "socks5":
+		return &Socks5Client{proxyUrl: u}, nil
+	case "http":
+		return &HttpClient{proxyUrl: u}, nil
+	default:
+		return &DefaultClient{}, nil
+	}
+}
+
+// ProxyConn is used to define the proxy
+type ProxyConn interface {
+	Dial(network string, address string) (net.Conn, error)
+}
+
+// DefaultClient is used to implement a proxy in default
+type DefaultClient struct {
+	rAddr *net.TCPAddr
+}
+
+// Socks5 implementation of ProxyConn
+// Set KeepAlive=-1 to reduce the call of syscall
+func (dc *DefaultClient) Dial(network string, address string) (conn net.Conn, err error) {
+	if dc.rAddr == nil {
+		dc.rAddr, err = net.ResolveTCPAddr("tcp", address)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return net.DialTCP(network, nil, dc.rAddr)
+}
+
+// Socks5Client is used to implement a proxy in socks5
+type Socks5Client struct {
+	proxyUrl *url.URL
+}
+
+// Socks5 implementation of ProxyConn
+func (s5 *Socks5Client) Dial(network string, address string) (net.Conn, error) {
+	d, err := proxy.FromURL(s5.proxyUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.Dial(network, address)
+}
+
+// Socks5Client is used to implement a proxy in http
+type HttpClient struct {
+	proxyUrl *url.URL
+}
+
+// Http implementation of ProxyConn
+func (hc *HttpClient) Dial(network string, address string) (net.Conn, error) {
+	req, err := http.NewRequest("CONNECT", "http://"+address, nil)
+	if err != nil {
+		return nil, err
+	}
+	password, _ := hc.proxyUrl.User.Password()
+	req.SetBasicAuth(hc.proxyUrl.User.Username(), password)
+	proxyConn, err := net.Dial("tcp", hc.proxyUrl.Host)
+	if err != nil {
+		return nil, err
+	}
+	if err := req.Write(proxyConn); err != nil {
+		return nil, err
+	}
+	res, err := http.ReadResponse(bufio.NewReader(proxyConn), req)
+	if err != nil {
+		return nil, err
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, errors.New("Proxy error " + res.Status)
+	}
+	return proxyConn, nil
 }

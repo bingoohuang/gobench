@@ -12,4 +12,5 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/tidwall/gjson v1.6.3
 	github.com/valyala/fasthttp v1.17.0
+	golang.org/x/net v0.0.0-20201016165138-7b1cca2348c0
 )
