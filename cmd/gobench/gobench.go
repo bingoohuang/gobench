@@ -98,7 +98,7 @@ func (a *App) Init() {
 	flag.IntVar(&a.connections, "c", 100, "Number of connections")
 	flag.IntVar(&a.goroutines, "t", 100, "Number of concurrent goroutines")
 	flag.IntVar(&a.requests, "r", 0, "Number of requests per goroutine")
-	flag.IntVar(&a.requestsTotal, "rr", 0, "Number of total requests")
+	flag.IntVar(&a.requestsTotal, "n", 0, "Number of total requests")
 
 	// only one should be provided: [requests|duration]
 	flag.StringVar(&a.duration, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
