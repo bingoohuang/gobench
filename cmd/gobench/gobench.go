@@ -97,30 +97,30 @@ type Conf struct {
 const usage = `Usage: gobench [options...]
 
 Options:
-  -u URL list (comma separated), or @URL's file path (line separated)
-  -m HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
-  -c Number of connections (default 100)
-  -n Number of total requests
-  -t Number of concurrent goroutines (default 100)
-  -d Duration of time (eg 10s, 10m, 2h45m) (default "0s")
-  -p 0:Print http response; 1:with extra newline; x.log: log file
-  -x proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
-  -post HTTP POST data
-  -post.file  HTTP POST data file path
-  -content.type Content-Type, eg, json, plain, or other full name
-  -head.auth Authorization header
-  -keepalive HTTP keep-alive (default true)
-  -ok condition like 'status == 200' for json output
-  -png Upload random png images by file upload
-  -png.size Upload fixed img size (eg. 44kB, 17MB)
-  -upload.file HTTP upload file path
-  -upload.filename  Upload file name (default "file")
-  -r  Number of requests per goroutine
-  -read.timeout  Read timeout (in milliseconds) (default 5000)
-  -write.timeout Write timeout (in milliseconds) (default 5000)
-  -cpus Number of used cpu cores. (default for current machine is %d cores)
-  -think Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
-  -v Print version
+  -u               URL list (comma separated), or @URL's file path (line separated)
+  -m               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
+  -c               Number of connections (default 100)
+  -n               Number of total requests
+  -t               Number of concurrent goroutines (default 100)
+  -r               Number of requests per goroutine
+  -d               Duration of time (eg 10s, 10m, 2h45m) (default "0s")
+  -p               Print something. 0:Print http response; 1:with extra newline; x.log: log file
+  -x               Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
+  -post            POST data
+  -post.file       POST data file path
+  -content.type    Content-Type, eg, json, plain, or other full name
+  -auth            Authorization header
+  -keepalive       HTTP keep-alive (default true)
+  -ok              Condition like 'status == 200' for json output
+  -png             Upload random png images by file upload
+  -png.size        Upload fixed img size (eg. 44kB, 17MB)
+  -upload.file     Upload file path
+  -upload.filename Upload file name (default "file")
+  -read.timeout    Read timeout (in milliseconds) (default 5000)
+  -write.timeout   Write timeout (in milliseconds) (default 5000)
+  -cpus            Number of used cpu cores. (default for current machine is %d cores)
+  -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
+  -v               Print version
 `
 
 func usageAndExit(msg string) {
@@ -143,12 +143,10 @@ func (a *App) Init() {
 	flag.IntVar(&a.goroutines, "t", 100, "")
 	flag.IntVar(&a.requests, "r", 0, "")
 	flag.IntVar(&a.requestsTotal, "n", 0, "")
-
 	flag.StringVar(&a.duration, "d", "0s", "")
 	flag.StringVar(&a.urls, "u", "", "")
 	flag.BoolVar(&a.keepAlive, "keepalive", true, "")
 	flag.StringVar(&a.printResult, "p", "", "")
-
 	flag.StringVar(&a.postDataFilePath, "post.file", "", "")
 	flag.StringVar(&a.postData, "post", "", "")
 	flag.StringVar(&a.uploadFilePath, "upload.file", "", "")
@@ -158,7 +156,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.method, "m", "", "")
 	flag.UintVar(&a.writeTimeout, "write.timeout", 5000, "")
 	flag.UintVar(&a.readTimeout, "read.timeout", 5000, "")
-	flag.StringVar(&a.authHeader, "head.auth", "", "")
+	flag.StringVar(&a.authHeader, "auth", "", "")
 	flag.StringVar(&a.contentType, "content.type", "", "")
 	flag.StringVar(&a.proxy, "x", "", "")
 	flag.StringVar(&a.think, "think", "", "")
