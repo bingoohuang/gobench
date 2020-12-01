@@ -5,10 +5,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/Knetic/govaluate"
-	"github.com/pkg/errors"
-	"github.com/tidwall/gjson"
-	"golang.org/x/net/proxy"
 	"io"
 	"io/ioutil"
 	"log"
@@ -27,6 +23,11 @@ import (
 	"sync/atomic"
 	"text/tabwriter"
 	"time"
+
+	"github.com/Knetic/govaluate"
+	"github.com/pkg/errors"
+	"github.com/tidwall/gjson"
+	"golang.org/x/net/proxy"
 
 	"github.com/bingoohuang/golang-trial/randimg"
 	"github.com/dustin/go-humanize"
@@ -93,35 +94,85 @@ type Conf struct {
 	firstRequests int
 }
 
+const usage = `Usage: gobench [options...]
+
+Options:
+  -u URL list (comma separated), or @URL's file path (line separated)
+  -m HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
+  -c Number of connections (default 100)
+  -n Number of total requests
+  -t Number of concurrent goroutines (default 100)
+  -d Duration of time (eg 10s, 10m, 2h45m) (default "0s")
+  -p 0:Print http response; 1:with extra newline; x.log: log file
+  -x proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
+  -post HTTP POST data
+  -post.file  HTTP POST data file path
+  -content.type Content-Type, eg, json, plain, or other full name
+  -head.auth Authorization header
+  -keepalive HTTP keep-alive (default true)
+  -ok condition like 'status == 200' for json output
+  -png Upload random png images by file upload
+  -png.size Upload fixed img size (eg. 44kB, 17MB)
+  -upload.file HTTP upload file path
+  -upload.filename  Upload file name (default "file")
+  -r  Number of requests per goroutine
+  -read.timeout  Read timeout (in milliseconds) (default 5000)
+  -write.timeout Write timeout (in milliseconds) (default 5000)
+  -cpus Number of used cpu cores. (default for current machine is %d cores)
+  -think Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
+  -v Print version
+`
+
+func usageAndExit(msg string) {
+	if msg != "" {
+		fmt.Fprintf(os.Stderr, msg)
+		fmt.Fprintf(os.Stderr, "\n\n")
+	}
+
+	flag.Usage()
+	os.Exit(1)
+}
+
 // Init ...
 func (a *App) Init() {
-	flag.IntVar(&a.connections, "c", 100, "Number of connections")
-	flag.IntVar(&a.goroutines, "t", 100, "Number of concurrent goroutines")
-	flag.IntVar(&a.requests, "r", 0, "Number of requests per goroutine")
-	flag.IntVar(&a.requestsTotal, "n", 0, "Number of total requests")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, usage, runtime.NumCPU())
+	}
 
-	// only one should be provided: [requests|duration]
-	flag.StringVar(&a.duration, "d", "0s", "Duration of time (eg 10s, 10m, 2h45m)")
-	flag.StringVar(&a.urls, "u", "", "URL list (comma separated), or @URL's file path (line separated)")
-	flag.BoolVar(&a.keepAlive, "keepAlive", true, "Do HTTP keep-alive")
-	flag.StringVar(&a.printResult, "p", "", "0:Print http response; 1:with extra newline; x.log: log file")
-	flag.BoolVar(&a.uploadRandImg, "randomPng", false, "Upload random png images by file upload")
-	flag.StringVar(&a.fixedImgSize, "fixedImgSize", "", "Upload fixed img size (eg. 44kB, 17MB)")
-	flag.StringVar(&a.postDataFilePath, "postDataFile", "", "HTTP POST data file path")
-	flag.StringVar(&a.postData, "postData", "", "HTTP POST data")
-	flag.StringVar(&a.uploadFilePath, "f", "", "HTTP upload file path")
-	flag.StringVar(&a.method, "method", "", "HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc")
-	flag.UintVar(&a.writeTimeout, "writeTimeout", 5000, "Write timeout (in milliseconds)")
-	flag.UintVar(&a.readTimeout, "readTimeout", 5000, "Read timeout (in milliseconds)")
-	flag.StringVar(&a.authHeader, "authHeader", "", "Authorization header")
-	flag.StringVar(&a.uploadFileName, "fileName", "file", "Upload file name")
-	flag.StringVar(&a.contentType, "contentType", "", "Content-Type, eg, json, plain, or other full name")
-	flag.StringVar(&a.proxy, "proxy", "", "proxy of request, like socks5://127.0.0.1:1080 http://127.0.0.1:1080")
-	flag.StringVar(&a.think, "think", "", "Think time, eg. 1s, 100ms, 100-200ms and etc. (Valid time units are ns, us or µs, ms, s, m, h)")
-	cond := flag.String("cond", "", "OK condition like 'status == 200' for json output")
-	version := flag.Bool("version", false, "Print version")
+	flag.IntVar(&a.connections, "c", 100, "")
+	flag.IntVar(&a.goroutines, "t", 100, "")
+	flag.IntVar(&a.requests, "r", 0, "")
+	flag.IntVar(&a.requestsTotal, "n", 0, "")
+
+	flag.StringVar(&a.duration, "d", "0s", "")
+	flag.StringVar(&a.urls, "u", "", "")
+	flag.BoolVar(&a.keepAlive, "keepalive", true, "")
+	flag.StringVar(&a.printResult, "p", "", "")
+
+	flag.StringVar(&a.postDataFilePath, "post.file", "", "")
+	flag.StringVar(&a.postData, "post", "", "")
+	flag.StringVar(&a.uploadFilePath, "upload.file", "", "")
+	flag.StringVar(&a.uploadFileName, "upload.filename", "file", "")
+	flag.BoolVar(&a.uploadRandImg, "png", false, "")
+	flag.StringVar(&a.fixedImgSize, "png.size", "", "")
+	flag.StringVar(&a.method, "m", "", "")
+	flag.UintVar(&a.writeTimeout, "write.timeout", 5000, "")
+	flag.UintVar(&a.readTimeout, "read.timeout", 5000, "")
+	flag.StringVar(&a.authHeader, "head.auth", "", "")
+	flag.StringVar(&a.contentType, "content.type", "", "")
+	flag.StringVar(&a.proxy, "x", "", "")
+	flag.StringVar(&a.think, "think", "", "")
+	cond := flag.String("ok", "", "")
+	version := flag.Bool("v", false, "")
+	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
 
 	flag.Parse()
+
+	if flag.NArg() > 0 {
+		usageAndExit("")
+	}
+
+	runtime.GOMAXPROCS(*cpus)
 
 	a.parseCond(*cond)
 
@@ -375,7 +426,7 @@ func (a *App) NewConfiguration() (c *Conf) {
 
 func (a *App) processUrls(c *Conf) {
 	if a.urls == "" {
-		log.Fatalf("urls must be provided")
+		usageAndExit("")
 	}
 
 	if strings.Index(a.urls, "@") == 0 {
@@ -451,6 +502,10 @@ func (a *App) period(c *Conf) {
 	c.firstRequests = a.requests
 
 	if a.requestsTotal > 0 {
+		if a.requestsTotal < a.goroutines {
+			a.goroutines = a.requestsTotal
+		}
+
 		c.requests = a.requestsTotal / a.goroutines
 		c.firstRequests = a.requestsTotal - c.requests*(a.goroutines-1)
 	}

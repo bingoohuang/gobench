@@ -3,7 +3,7 @@
 a HTTP/HTTPS load testing and benchmarking tool supporting http uploading. Originated from [gobench](https://github.com/cmpxchg16/gobench).
 
 ```bash
-$ gobench -u http://127.0.0.1:5003/api/demo -rr 1000
+$ gobench -u http://127.0.0.1:5003/api/demo -n 1000
 Dispatching 100 goroutines
 Waiting for results...
 
@@ -16,50 +16,35 @@ Read throughput:                2.9 MiB/sec
 Write throughput:               987 KiB/sec
 Test time:                      92.985453ms
 
-$ gobench -h
-Usage of gobench:
-  -authHeader string
-        Authorization header
-  -c int
-        Number of connections (default 100)
-  -contentType string
-        Content-Type, eg, json, plain, or other full name
-  -d string
-        Duration of time (eg 10s, 10m, 2h45m) (default "0s")
-  -f string
-        HTTP upload file path
-  -fileName string
-        Upload file name (default "file")
-  -fixedImgSize string
-        Upload fixed img size (eg. 44kB, 17MB)
-  -keepAlive
-        Do HTTP keep-alive (default true)
-  -method string
-        HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc
-  -p string
-        0:Print http response; 1:with extra newline; x.log: log file
-  -postData string
-        HTTP POST data
-  -postDataFile string
-        HTTP POST data file path
-  -r int
-        Number of requests per goroutine
-  -randomPng
-        Upload random png images by file upload
-  -readTimeout uint
-        Read timeout (in milliseconds) (default 5000)
-  -rr int
-        Number of total requests
-  -t int
-        Number of concurrent goroutines (default 100)
-  -think string
-        Think time, eg. 1s, 100ms, 100-200ms and etc. (Valid time units are ns, us or µs, ms, s, m, h)
-  -u string
-        URL list (comma separated), or @URL's file path (line separated)
-  -version
-        Print version
-  -writeTimeout uint
-        Write timeout (in milliseconds) (default 5000)
+$ gobench
+Usage: gobench [options...]
+
+Options:
+  -u URL list (comma separated), or @URL's file path (line separated)
+  -m HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
+  -c Number of connections (default 100)
+  -n Number of total requests
+  -t Number of concurrent goroutines (default 100)
+  -d Duration of time (eg 10s, 10m, 2h45m) (default "0s")
+  -p 0:Print http response; 1:with extra newline; x.log: log file
+  -x proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
+  -post HTTP POST data
+  -post.file  HTTP POST data file path
+  -content.type Content-Type, eg, json, plain, or other full name
+  -head.auth Authorization header
+  -keepalive HTTP keep-alive (default true)
+  -ok condition like 'status == 200' for json output
+  -png Upload random png images by file upload
+  -png.size Upload fixed img size (eg. 44kB, 17MB)
+  -upload.file HTTP upload file path
+  -upload.filename  Upload file name (default "file")
+  -r  Number of requests per goroutine
+  -read.timeout  Read timeout (in milliseconds) (default 5000)
+  -write.timeout Write timeout (in milliseconds) (default 5000)
+  -cpus Number of used cpu cores. (default for current machine is 12 cores)
+  -think Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
+  -v Print version
+
 ```
 
 HTTP upload server benchmark in few languages/frameworks and gobench tool
@@ -159,3 +144,7 @@ Environment:
 | --------- | --------- | ------- | ------ | -------- | -------- | -------- | --- | --- | ------- | ---------- | --------------- | ----------- |
 | HTTP 请求 | 20000     | 61      | 36     | 133      | 183      | 311      | 7   | 506 | 0.000%  | 319.89252  | 35.93           | 655284.50   |
 | 总体      | 20000     | 61      | 36     | 133      | 183      | 311      | 7   | 506 | 0.000%  | 319.89252  | 35.93           | 655284.50   |
+
+## resources
+
+1. [denji/awesome-http-benchmark](https://github.com/denji/awesome-http-benchmark)
