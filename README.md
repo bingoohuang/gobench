@@ -48,7 +48,7 @@ Options:
 
 ## Features
 
-- [x] seeweedfs bench support like `gobench -weed=http://192.168.126.5:3333 -upload.file=./weedfiles -n=10000 -think 100-500ms -p 1`
+- [x] [seeweedfs](https://github.com/chrislusf/seaweedfs) bench support like `gobench -weed=http://192.168.126.5:3333 -upload.file=./weedfiles -n=10000 -think 100-500ms -p 1`
 
 HTTP upload server benchmark in few languages/frameworks and gobench tool
 
