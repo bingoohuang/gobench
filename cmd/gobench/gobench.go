@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/karrick/godirwalk"
 	"io"
 	"io/ioutil"
 	"log"
@@ -29,6 +30,7 @@ import (
 	"github.com/tidwall/gjson"
 	"golang.org/x/net/proxy"
 
+	"github.com/bingoohuang/cweed"
 	"github.com/bingoohuang/golang-trial/randimg"
 	"github.com/dustin/go-humanize"
 
@@ -77,6 +79,9 @@ type App struct {
 	responsePrinterFile *os.File
 	thinkMin            time.Duration
 	thinkMax            time.Duration
+
+	weedVolumeAssignedUrl chan string // 海草文件上传路径地址
+	exitChan              chan bool
 }
 
 // Conf for gobench.
@@ -90,8 +95,9 @@ type Conf struct {
 	authHeader  string
 	contentType string
 
-	myClient      fasthttp.Client
-	firstRequests int
+	myClient        fasthttp.Client
+	firstRequests   int
+	postFileChannel chan string
 }
 
 const usage = `Usage: gobench [options...]
@@ -121,6 +127,7 @@ Options:
   -cpus            Number of used cpu cores. (default for current machine is %d cores)
   -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
   -v               Print version
+  -weed            weed master URL, like http://127.0.0.1:9333
 `
 
 func usageAndExit(msg string) {
@@ -160,6 +167,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.contentType, "content.type", "", "")
 	flag.StringVar(&a.proxy, "x", "", "")
 	flag.StringVar(&a.think, "think", "", "")
+	weedMasterURL := flag.String("weed", "", "")
 	cond := flag.String("ok", "", "")
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
@@ -185,6 +193,8 @@ func (a *App) Init() {
 		panic(err)
 	}
 
+	a.exitChan = make(chan bool)
+	a.setupWeed(*weedMasterURL)
 	a.setupResponsePrinter()
 }
 
@@ -313,9 +323,8 @@ func main() {
 	}
 
 	fmt.Println("Waiting for results...")
-
 	totalRequests := app.waitResults(requestsChan, totalReqsChan, statComplete)
-
+	close(app.exitChan)
 	app.printResults(startTime, totalRequests, rr)
 }
 
@@ -423,22 +432,40 @@ func (a *App) NewConfiguration() (c *Conf) {
 }
 
 func (a *App) processUrls(c *Conf) {
-	if a.urls == "" {
+	if a.urls == "" && a.weedVolumeAssignedUrl == nil {
 		usageAndExit("")
 	}
 
 	if strings.Index(a.urls, "@") == 0 {
-		urlsFilePath := a.urls[1:]
-
 		var err error
 
+		urlsFilePath := a.urls[1:]
 		c.urls, err = FileToLines(urlsFilePath)
 		if err != nil {
 			log.Fatalf("Error in ioutil.ReadFile for file: %s Error: %v", urlsFilePath, err)
 		}
 	} else {
 		parts := strings.Split(a.urls, ",")
-		c.urls = append(c.urls, parts...)
+		addr := ""
+		for i := 0; i < len(parts); i++ {
+			if i == 0 {
+				addr = parts[0]
+				continue
+			}
+
+			if strings.HasPrefix(parts[i], "http:") || strings.HasPrefix(parts[i], "https:") {
+				if addr != "" {
+					c.urls = append(c.urls, addr)
+				}
+				addr = addr[:0]
+			} else {
+				addr += "," + parts[i]
+			}
+		}
+
+		if addr != "" {
+			c.urls = append(c.urls, addr)
+		}
 	}
 }
 
@@ -447,15 +474,67 @@ func (a *App) dealUploadFilePath(c *Conf) {
 		return
 	}
 
-	var err error
+	fs, err := os.Stat(a.uploadFilePath)
+	if err != nil && os.IsNotExist(err) {
+		log.Fatalf("%s dos not exist", a.uploadFilePath)
+	}
+	if err != nil {
+		log.Fatalf("stat file %s error  %v", a.uploadFilePath, err)
+	}
 
+	// 单个上传文件
 	a.tryMethod(c, http.MethodPost)
 
-	c.postData, c.contentType, err = ReadUploadMultipartFile(a.uploadFileName, a.uploadFilePath)
+	c.postFileChannel = make(chan string, 1)
 
-	if err != nil {
-		log.Fatalf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uploadFilePath, err)
+	if !fs.IsDir() {
+		c.postFileChannel <- a.uploadFilePath
+		return
 	}
+
+	go func() {
+		errStopped := fmt.Errorf("program stopped")
+		defer func() {
+			close(c.postFileChannel)
+		}()
+
+		for {
+			select {
+			case <-a.exitChan:
+				return
+			default:
+			}
+
+			err := godirwalk.Walk(a.uploadFilePath, &godirwalk.Options{
+				Callback: func(osPathname string, de *godirwalk.Dirent) error {
+					if v, e := de.IsDirOrSymlinkToDir(); v || e != nil {
+						return e
+					}
+
+					if strings.HasPrefix(de.Name(), ".") {
+						return nil
+					}
+
+					select {
+					case <-a.exitChan:
+						return errStopped
+					default:
+					}
+
+					c.postFileChannel <- osPathname
+					return nil
+				},
+				Unsorted: true,
+			})
+
+			if err != nil {
+				if err != errStopped {
+					log.Printf("Error in walk dir: %s Error: %v", a.uploadFilePath, err)
+				}
+			}
+
+		}
+	}()
 }
 
 func (a *App) dealPostDataFilePath(c *Conf) {
@@ -573,8 +652,11 @@ func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, ima
 	return
 }
 
-func (a *App) client(exitChan chan int, resultChan chan requestResult, conf *Conf, req int) {
-	urlIndex := rand.Intn(len(conf.urls))
+func (a *App) client(requestsChan chan int, resultChan chan requestResult, conf *Conf, req int) {
+	urlIndex := -1
+	if len(conf.urls) > 0 {
+		urlIndex = rand.Intn(len(conf.urls))
+	}
 
 	i := 0
 	for ; !a.exitRequested && (req == 0 || i < req); i++ {
@@ -582,17 +664,23 @@ func (a *App) client(exitChan chan int, resultChan chan requestResult, conf *Con
 			a.thinking()
 		}
 
-		a.doRequest(resultChan, conf, conf.urls[urlIndex])
+		addr := ""
+		if urlIndex >= 0 {
+			addr = conf.urls[urlIndex]
+		}
+		a.doRequest(resultChan, conf, addr)
 
-		if urlIndex++; urlIndex >= len(conf.urls) {
-			urlIndex = 0
+		if urlIndex >= 0 {
+			if urlIndex++; urlIndex >= len(conf.urls) {
+				urlIndex = 0
+			}
 		}
 	}
 
-	exitChan <- i
+	requestsChan <- i
 }
 
-func (a *App) doRequest(resultChan chan requestResult, c *Conf, url string) {
+func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 	postData := c.postData
 	contentType := c.contentType
 	fileName := ""
@@ -607,7 +695,22 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, url string) {
 
 	<-a.connectionChan
 
-	go a.do(resultChan, c, url, c.method, contentType, fileName, postData)
+	go func() {
+		if c.postFileChannel == nil { // 非目录文件上传请求
+			a.do(resultChan, c, a.weed(addr), c.method, contentType, fileName, postData)
+			return
+		}
+
+		for pf := range c.postFileChannel {
+			data, ct, err := ReadUploadMultipartFile(a.uploadFileName, pf)
+			if err != nil {
+				log.Printf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uploadFilePath, err)
+				continue
+			}
+
+			a.do(resultChan, c, a.weed(addr), c.method, ct, pf, data)
+		}
+	}()
 }
 
 type requestResult struct {
@@ -616,27 +719,37 @@ type requestResult struct {
 	badFailed     int
 }
 
-func (a *App) do(result chan requestResult, cnf *Conf, url, method, contentType, fileName string, postData []byte) {
-	req := fasthttp.AcquireRequest()
+func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType, fileName string, postData []byte) {
+	var (
+		err  error
+		resp *fasthttp.Response
+	)
 
-	defer func() {
-		fasthttp.ReleaseRequest(req)
-		a.connectionChan <- true
-	}()
+	statusCode := 0
 
-	req.SetRequestURI(url)
-	req.Header.SetMethod(method)
-	SetHeaderIfNotEmpty(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
-	SetHeaderIfNotEmpty(req, "Authorization", cnf.authHeader)
-	SetHeaderIfNotEmpty(req, "Content-Type", contentType)
-	req.SetBody(postData)
+	if strings.HasPrefix(addr, "err:") {
+		err = errors.New(addr)
+	} else {
+		req := fasthttp.AcquireRequest()
 
-	resp := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(resp)
+		defer func() {
+			fasthttp.ReleaseRequest(req)
+			a.connectionChan <- true
+		}()
 
-	err := cnf.myClient.Do(req, resp)
-	statusCode := resp.StatusCode()
+		req.SetRequestURI(addr)
+		req.Header.SetMethod(method)
+		SetHeaderIfNotEmpty(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
+		SetHeaderIfNotEmpty(req, "Authorization", cnf.authHeader)
+		SetHeaderIfNotEmpty(req, "Content-Type", contentType)
+		req.SetBody(postData)
 
+		resp = fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseResponse(resp)
+
+		err = cnf.myClient.Do(req, resp)
+		statusCode = resp.StatusCode()
+	}
 	var (
 		rr         requestResult
 		resultDesc string
@@ -660,7 +773,7 @@ func (a *App) do(result chan requestResult, cnf *Conf, url, method, contentType,
 		resultDesc = "[x]"
 	}
 
-	a.printResponse(fileName, resultDesc, statusCode, resp)
+	a.printResponse(addr, fileName, resultDesc, statusCode, resp)
 
 	result <- rr
 }
@@ -691,12 +804,17 @@ func (a *App) isOK(resp *fasthttp.Response) bool {
 	return yes && ok
 }
 
-func (a *App) printResponse(fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
 	if a.responsePrinter == nil {
 		return
 	}
 
 	r := ""
+
+	if a.weedVolumeAssignedUrl != nil {
+		r += "url:" + addr + " "
+	}
+
 	if fileName != "" {
 		r += "file:" + fileName + " "
 	}
@@ -832,6 +950,40 @@ func (a *App) setupResponsePrinter() {
 	a.responsePrinter = func(a string) {
 		lastResponseCh <- a
 	}
+}
+
+func (a *App) weed(addr string) string {
+	if a.weedVolumeAssignedUrl == nil {
+		return addr
+	}
+
+	return <-a.weedVolumeAssignedUrl
+}
+
+func (a *App) setupWeed(weedMasterURL string) {
+	if weedMasterURL == "" {
+		return
+	}
+
+	timeout := time.Duration(a.readTimeout) * time.Millisecond
+	weedClient, err := cweed.New(weedMasterURL, nil, 8096, &http.Client{Timeout: timeout})
+	if err != nil {
+		log.Fatalf("create weedClient for %s error: %v", weedMasterURL, err)
+	}
+
+	a.weedVolumeAssignedUrl = make(chan string, 100)
+	go func() {
+		for {
+			result, err := weedClient.Assign(nil)
+			if err != nil {
+				log.Printf("assign url error: %s", err)
+				a.weedVolumeAssignedUrl <- "err:" + err.Error()
+			} else {
+				fileUrl := "http://" + result.PublicURL + "/" + result.FileID
+				a.weedVolumeAssignedUrl <- fileUrl
+			}
+		}
+	}()
 }
 
 // HandleInterrupt handles Ctrl+C to exit after calling f.
