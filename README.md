@@ -44,8 +44,11 @@ Options:
   -cpus Number of used cpu cores. (default for current machine is 12 cores)
   -think Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
   -v Print version
-
 ```
+
+## Features
+
+[x] seeweedfs bench support like `gobench -weed=http://192.168.126.5:3333 -upload.file=./weedfiles -n=10000 -think 100-500ms -p 1`
 
 HTTP upload server benchmark in few languages/frameworks and gobench tool
 
