@@ -807,8 +807,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 		return
 	}
 
-	r := ""
-
+	r := time.Now().Format(`2006-01-02 15:04:05.000 `)
 	if a.weedVolumeAssignedUrl != nil {
 		r += "url:" + addr + " "
 	}
