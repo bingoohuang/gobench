@@ -731,7 +731,6 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 		err = errors.New(addr)
 	} else {
 		req := fasthttp.AcquireRequest()
-
 		defer func() {
 			fasthttp.ReleaseRequest(req)
 			a.connectionChan <- true
@@ -767,7 +766,6 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 			rr.badFailed = 1
 			resultDesc = "[x]"
 		}
-
 	default:
 		rr.badFailed = 1
 		resultDesc = "[x]"
@@ -805,7 +803,7 @@ func (a *App) isOK(resp *fasthttp.Response) bool {
 }
 
 func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
-	if a.responsePrinter == nil {
+	if a.responsePrinter == nil || resp == nil {
 		return
 	}
 
@@ -821,8 +819,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 
 	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] "
 
-	body := string(resp.Body())
-	if body != "" {
+	if body := string(resp.Body()); body != "" {
 		r += body
 	}
 
