@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/karrick/godirwalk"
 	"io"
 	"io/ioutil"
 	"log"
@@ -22,8 +21,11 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"text/tabwriter"
 	"time"
+
+	"github.com/karrick/godirwalk"
 
 	"github.com/Knetic/govaluate"
 	"github.com/pkg/errors"
@@ -59,8 +61,8 @@ type App struct {
 	exitRequested bool
 	printResult   string
 
-	writeTimeout    uint
-	readTimeout     uint
+	writeTimeout    time.Duration
+	readTimeout     time.Duration
 	readThroughput  uint64
 	writeThroughput uint64
 
@@ -100,7 +102,7 @@ type Conf struct {
 	postFileChannel chan string
 }
 
-const usage = `Usage: gobench [options...]
+const usage = `Usage: gobench [options...] url1[,url2...]
 
 Options:
   -u               URL list (comma separated), or @URL's file path (line separated)
@@ -112,18 +114,18 @@ Options:
   -d               Duration of time (eg 10s, 10m, 2h45m) (default "0s")
   -p               Print something. 0:Print http response; 1:with extra newline; x.log: log file
   -x               Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
-  -post            POST data
-  -post.file       POST data file path
-  -content.type    Content-Type, eg, json, plain, or other full name
+  -P               POST data
+  -p.file          POST data file path
+  -c.type          Content-Type, eg, json, plain, or other full name
   -auth            Authorization header
-  -keepalive       HTTP keep-alive (default true)
+  -k               HTTP keep-alive (default true)
   -ok              Condition like 'status == 200' for json output
   -png             Upload random png images by file upload
-  -png.size        Upload fixed img size (eg. 44kB, 17MB)
-  -upload.file     Upload file path
-  -upload.filename Upload file name (default "file")
-  -read.timeout    Read timeout (in milliseconds) (default 5000)
-  -write.timeout   Write timeout (in milliseconds) (default 5000)
+  -p.size          Upload fixed img size (eg. 44kB, 17MB)
+  -u.file           Upload file path
+  -u.name Upload   file name (default "file")
+  -r.timeout       Read timeout (like 5ms,10ms,10s) (default 5s)
+  -w.timeout       Write timeout (like 5ms,10ms,10s) (default 5s)
   -cpus            Number of used cpu cores. (default for current machine is %d cores)
   -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
   -v               Print version
@@ -152,19 +154,19 @@ func (a *App) Init() {
 	flag.IntVar(&a.requestsTotal, "n", 0, "")
 	flag.StringVar(&a.duration, "d", "0s", "")
 	flag.StringVar(&a.urls, "u", "", "")
-	flag.BoolVar(&a.keepAlive, "keepalive", true, "")
+	flag.BoolVar(&a.keepAlive, "k", true, "")
 	flag.StringVar(&a.printResult, "p", "", "")
-	flag.StringVar(&a.postDataFilePath, "post.file", "", "")
-	flag.StringVar(&a.postData, "post", "", "")
-	flag.StringVar(&a.uploadFilePath, "upload.file", "", "")
-	flag.StringVar(&a.uploadFileName, "upload.filename", "file", "")
+	flag.StringVar(&a.postDataFilePath, "p.file", "", "")
+	flag.StringVar(&a.postData, "P", "", "")
+	flag.StringVar(&a.uploadFilePath, "u.file", "", "")
+	flag.StringVar(&a.uploadFileName, "u.filename", "file", "")
 	flag.BoolVar(&a.uploadRandImg, "png", false, "")
-	flag.StringVar(&a.fixedImgSize, "png.size", "", "")
+	flag.StringVar(&a.fixedImgSize, "p.size", "", "")
 	flag.StringVar(&a.method, "m", "", "")
-	flag.UintVar(&a.writeTimeout, "write.timeout", 5000, "")
-	flag.UintVar(&a.readTimeout, "read.timeout", 5000, "")
+	flag.DurationVar(&a.writeTimeout, "w.timeout", 5*time.Second, "")
+	flag.DurationVar(&a.readTimeout, "r.timeout", 5*time.Second, "")
 	flag.StringVar(&a.authHeader, "auth", "", "")
-	flag.StringVar(&a.contentType, "content.type", "", "")
+	flag.StringVar(&a.contentType, "c.type", "", "")
 	flag.StringVar(&a.proxy, "x", "", "")
 	flag.StringVar(&a.think, "think", "", "")
 	weedMasterURL := flag.String("weed", "", "")
@@ -196,6 +198,13 @@ func (a *App) Init() {
 	a.exitChan = make(chan bool)
 	a.setupWeed(*weedMasterURL)
 	a.setupResponsePrinter()
+
+	singalCh := make(chan os.Signal)
+	signal.Notify(singalCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-singalCh
+		close(a.exitChan)
+	}()
 }
 
 func (a *App) parseCond(cond string) {
@@ -324,7 +333,16 @@ func main() {
 
 	fmt.Println("Waiting for results...")
 	totalRequests := app.waitResults(requestsChan, totalReqsChan, statComplete)
-	close(app.exitChan)
+
+	select {
+	case _, opened := <-app.exitChan:
+		if opened {
+			close(app.exitChan)
+		}
+	default:
+		close(app.exitChan)
+	}
+
 	app.printResults(startTime, totalRequests, rr)
 }
 
