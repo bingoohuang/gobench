@@ -235,8 +235,13 @@ func (a *App) thinking() {
 	}
 
 	a.responsePrinter("think " + thinkTime.String() + "...")
+	ticker := time.NewTicker(thinkTime)
+	defer ticker.Stop()
 
-	time.Sleep(thinkTime)
+	select {
+	case <-a.exitChan:
+	case <-ticker.C:
+	}
 }
 
 func (a *App) parseThinkTime() (err error) {
