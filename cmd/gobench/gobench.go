@@ -122,8 +122,8 @@ Options:
   -ok              Condition like 'status == 200' for json output
   -png             Upload random png images by file upload
   -p.size          Upload fixed img size (eg. 44kB, 17MB)
-  -u.file           Upload file path
-  -u.name Upload   file name (default "file")
+  -u.file          Upload file path
+  -u.name          Upload file name (default "file")
   -r.timeout       Read timeout (like 5ms,10ms,10s) (default 5s)
   -w.timeout       Write timeout (like 5ms,10ms,10s) (default 5s)
   -cpus            Number of used cpu cores. (default for current machine is %d cores)
