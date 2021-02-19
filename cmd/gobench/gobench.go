@@ -442,8 +442,8 @@ func (a *App) NewConfiguration() (c *Conf) {
 	a.dealPostDataFilePath(c)
 	a.dealUploadFilePath(c)
 
-	c.myClient.ReadTimeout = time.Duration(a.readTimeout) * time.Millisecond
-	c.myClient.WriteTimeout = time.Duration(a.writeTimeout) * time.Millisecond
+	c.myClient.ReadTimeout = a.readTimeout
+	c.myClient.WriteTimeout = a.writeTimeout
 	// c.myClient.MaxConnsPerHost = connections
 	c.myClient.Dial = a.MyDialer()
 
@@ -781,7 +781,7 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 	case err != nil:
 		rr.networkFailed = 1
 		resultDesc = "[x] " + err.Error()
-	case statusCode < http.StatusBadRequest:
+	case statusCode >= 200 && statusCode < 300:
 		if a.isOK(resp) {
 			rr.success = 1
 			resultDesc = "[√]"
@@ -984,7 +984,7 @@ func (a *App) setupWeed(weedMasterURL string) {
 		return
 	}
 
-	timeout := time.Duration(a.readTimeout) * time.Millisecond
+	timeout := a.readTimeout
 	weedClient, err := cweed.New(weedMasterURL, nil, 8096, &http.Client{Timeout: timeout})
 	if err != nil {
 		log.Fatalf("create weedClient for %s error: %v", weedMasterURL, err)
@@ -1193,7 +1193,7 @@ type HttpClient struct {
 }
 
 // Http implementation of ProxyConn
-func (hc *HttpClient) Dial(network string, address string) (net.Conn, error) {
+func (hc *HttpClient) Dial(_ string, address string) (net.Conn, error) {
 	req, err := http.NewRequest("CONNECT", "http://"+address, nil)
 	if err != nil {
 		return nil, err
