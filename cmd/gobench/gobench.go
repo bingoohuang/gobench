@@ -751,7 +751,7 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 	statusCode := 0
 
 	if strings.HasPrefix(addr, "err:") {
-		err = errors.New(addr)
+		err = errors.New("addr-" + addr)
 	} else {
 		req := fasthttp.AcquireRequest()
 		defer func() {
@@ -780,7 +780,7 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 	switch {
 	case err != nil:
 		rr.networkFailed = 1
-		resultDesc = "[x] " + err.Error()
+		resultDesc = "[X] " + err.Error()
 	case statusCode >= 200 && statusCode < 300:
 		if a.isOK(resp) {
 			rr.success = 1
@@ -984,25 +984,34 @@ func (a *App) setupWeed(weedMasterURL string) {
 		return
 	}
 
-	timeout := a.readTimeout
-	weedClient, err := cweed.New(weedMasterURL, nil, 8096, &http.Client{Timeout: timeout})
+	c, err := cweed.New(weedMasterURL, nil, 8096, &http.Client{Timeout: a.readTimeout})
 	if err != nil {
-		log.Fatalf("create weedClient for %s error: %v", weedMasterURL, err)
+		log.Fatalf("create c for %s error: %v", weedMasterURL, err)
 	}
 
 	a.weedVolumeAssignedUrl = make(chan string, 100)
-	go func() {
-		for {
-			result, err := weedClient.Assign(nil)
-			if err != nil {
-				log.Printf("assign url error: %s", err)
-				a.weedVolumeAssignedUrl <- "err:" + err.Error()
-			} else {
-				fileUrl := "http://" + result.PublicURL + "/" + result.FileID
-				a.weedVolumeAssignedUrl <- fileUrl
-			}
+	go a.assignFids(c)
+}
+
+func (a *App) assignFids(c *cweed.Weed) {
+	for {
+		result, err := c.Assign(url.Values{"count": []string{"100"}})
+		if err != nil {
+			log.Printf("assign url error: %s", err)
+			a.weedVolumeAssignedUrl <- "err:" + err.Error()
+			continue
 		}
-	}()
+
+		p := "http://" + result.PublicURL + "/" + result.FileID
+		if result.Count <= 0 {
+			a.weedVolumeAssignedUrl <- p
+			continue
+		}
+
+		for i := uint64(0); i < result.Count; i++ {
+			a.weedVolumeAssignedUrl <- p + fmt.Sprintf("_%d", i+1)
+		}
+	}
 }
 
 // HandleInterrupt handles Ctrl+C to exit after calling f.
