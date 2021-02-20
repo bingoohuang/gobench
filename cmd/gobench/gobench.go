@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -32,7 +33,6 @@ import (
 	"github.com/tidwall/gjson"
 	"golang.org/x/net/proxy"
 
-	"github.com/bingoohuang/cweed"
 	"github.com/bingoohuang/golang-trial/randimg"
 	"github.com/dustin/go-humanize"
 
@@ -84,6 +84,7 @@ type App struct {
 
 	weedVolumeAssignedUrl chan string // 海草文件上传路径地址
 	exitChan              chan bool
+	weedMasterURL         string
 }
 
 // Conf for gobench.
@@ -103,7 +104,6 @@ type Conf struct {
 }
 
 const usage = `Usage: gobench [options...] url1[,url2...]
-
 Options:
   -u               URL list (comma separated), or @URL's file path (line separated)
   -m               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
@@ -129,7 +129,7 @@ Options:
   -cpus            Number of used cpu cores. (default for current machine is %d cores)
   -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
   -v               Print version
-  -weed            weed master URL, like http://127.0.0.1:9333
+  -weed            Weed master URL, like http://127.0.0.1:9333
 `
 
 func usageAndExit(msg string) {
@@ -169,12 +169,20 @@ func (a *App) Init() {
 	flag.StringVar(&a.contentType, "c.type", "", "")
 	flag.StringVar(&a.proxy, "x", "", "")
 	flag.StringVar(&a.think, "think", "", "")
-	weedMasterURL := flag.String("weed", "", "")
+	flag.StringVar(&a.weedMasterURL, "weed", "", "")
 	cond := flag.String("ok", "", "")
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
 
 	flag.Parse()
+
+	if a.weedMasterURL != "" {
+		var err error
+		a.weedMasterURL, err = createAssignUri(a.weedMasterURL)
+		if err != nil {
+			usageAndExit(err.Error())
+		}
+	}
 
 	if flag.NArg() > 0 {
 		usageAndExit("")
@@ -196,7 +204,6 @@ func (a *App) Init() {
 	}
 
 	a.exitChan = make(chan bool)
-	a.setupWeed(*weedMasterURL)
 	a.setupResponsePrinter()
 
 	singalCh := make(chan os.Signal)
@@ -312,11 +319,12 @@ func main() {
 	startTime := time.Now()
 
 	HandleInterrupt(func() { app.exitRequested = true }, false)
-	HandleMaxProcs()
 
 	c := app.NewConfiguration()
 	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines,
 		startTime.Format("2006-01-02 15:04:05.000"))
+
+	app.setupWeed(&c.myClient)
 
 	resultChan := make(chan requestResult)
 	totalReqsChan := make(chan int)
@@ -444,7 +452,7 @@ func (a *App) NewConfiguration() (c *Conf) {
 
 	c.myClient.ReadTimeout = a.readTimeout
 	c.myClient.WriteTimeout = a.writeTimeout
-	// c.myClient.MaxConnsPerHost = connections
+	c.myClient.MaxConnsPerHost = a.connections
 	c.myClient.Dial = a.MyDialer()
 
 	if a.contentType != "" {
@@ -455,8 +463,8 @@ func (a *App) NewConfiguration() (c *Conf) {
 }
 
 func (a *App) processUrls(c *Conf) {
-	if a.urls == "" && a.weedVolumeAssignedUrl == nil {
-		usageAndExit("")
+	if a.urls == "" && a.weedMasterURL == "" {
+		usageAndExit("url/weed required!")
 	}
 
 	if strings.Index(a.urls, "@") == 0 {
@@ -624,23 +632,11 @@ func (a *App) period(c *Conf) {
 
 	c.duration = period
 
-	timeout := make(chan bool, 1)
-
 	go func() {
 		<-time.After(period)
-		timeout <- true
-	}()
-
-	go func() {
-		<-timeout
-
-		pid := os.Getpid()
-		proc, _ := os.FindProcess(pid)
-		err := proc.Signal(os.Interrupt)
-
-		if err != nil {
+		proc, _ := os.FindProcess(os.Getpid())
+		if err := proc.Signal(os.Interrupt); err != nil {
 			log.Println(err)
-			return
 		}
 	}()
 }
@@ -742,10 +738,31 @@ type requestResult struct {
 	badFailed     int
 }
 
-func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType, fileName string, postData []byte) {
+func DoGet(c *fasthttp.Client, requestUri string, out interface{}) error {
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	req.SetRequestURI(requestUri)
+
+	rsp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(rsp)
+	if err := c.Do(req, rsp); err != nil {
+		return err
+	}
+
+	if out != nil {
+		body := rsp.Body()
+		if err := json.Unmarshal(body, out); err != nil {
+			return fmt.Errorf("json Unmarshal %s error %w", body, err)
+		}
+	}
+
+	return nil
+}
+
+func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fileName string, postData []byte) {
 	var (
-		err  error
-		resp *fasthttp.Response
+		err error
+		rsp *fasthttp.Response
 	)
 
 	statusCode := 0
@@ -761,16 +778,16 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 
 		req.SetRequestURI(addr)
 		req.Header.SetMethod(method)
-		SetHeaderIfNotEmpty(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
-		SetHeaderIfNotEmpty(req, "Authorization", cnf.authHeader)
-		SetHeaderIfNotEmpty(req, "Content-Type", contentType)
+		SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
+		SetHeader(req, "Authorization", cnf.authHeader)
+		SetHeader(req, "Content-Type", contentType)
 		req.SetBody(postData)
 
-		resp = fasthttp.AcquireResponse()
-		defer fasthttp.ReleaseResponse(resp)
+		rsp = fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseResponse(rsp)
 
-		err = cnf.myClient.Do(req, resp)
-		statusCode = resp.StatusCode()
+		err = cnf.myClient.Do(req, rsp)
+		statusCode = rsp.StatusCode()
 	}
 	var (
 		rr         requestResult
@@ -782,7 +799,7 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 		rr.networkFailed = 1
 		resultDesc = "[X] " + err.Error()
 	case statusCode >= 200 && statusCode < 300:
-		if a.isOK(resp) {
+		if a.isOK(rsp) {
 			rr.success = 1
 			resultDesc = "[√]"
 		} else {
@@ -794,9 +811,9 @@ func (a *App) do(result chan requestResult, cnf *Conf, addr, method, contentType
 		resultDesc = "[x]"
 	}
 
-	a.printResponse(addr, fileName, resultDesc, statusCode, resp)
+	a.printResponse(addr, fileName, resultDesc, statusCode, rsp)
 
-	result <- rr
+	rc <- rr
 }
 
 func (a *App) isOK(resp *fasthttp.Response) bool {
@@ -848,10 +865,10 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 	a.responsePrinter(r)
 }
 
-// SetHeaderIfNotEmpty set request header if value is not empty.
-func SetHeaderIfNotEmpty(request *fasthttp.Request, header, value string) {
+// SetHeader set request header if value is not empty.
+func SetHeader(r *fasthttp.Request, header, value string) {
 	if value != "" {
-		request.Header.Set(header, value)
+		r.Header.Set(header, value)
 	}
 }
 
@@ -979,43 +996,65 @@ func (a *App) weed(addr string) string {
 	return <-a.weedVolumeAssignedUrl
 }
 
-func (a *App) setupWeed(weedMasterURL string) {
-	if weedMasterURL == "" {
+func (a *App) setupWeed(c *fasthttp.Client) {
+	if a.weedMasterURL == "" {
 		return
-	}
-
-	c, err := cweed.New(weedMasterURL, nil, 8096, &http.Client{Timeout: a.readTimeout})
-	if err != nil {
-		log.Fatalf("create c for %s error: %v", weedMasterURL, err)
 	}
 
 	a.weedVolumeAssignedUrl = make(chan string, 100)
 	go a.assignFids(c)
 }
 
-func (a *App) assignFids(c *cweed.Weed) {
+// AssignResult contains assign result.
+// Raw response: {"fid":"1,0a1653fd0f","url":"localhost:8899","publicUrl":"localhost:8899","count":1,"error":""}
+type AssignResult struct {
+	FileID    string `json:"fid,omitempty"`
+	URL       string `json:"url,omitempty"`
+	PublicURL string `json:"publicUrl,omitempty"`
+	Count     int    `json:"count,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+func createAssignUri(baseUri string) (string, error) {
+	u, _ := url.Parse("/dir/assign")
+	q := u.Query()
+	q.Set("count", "100")
+	u.RawQuery = q.Encode()
+
+	base, err := url.Parse(baseUri)
+	if err != nil {
+		return "", err
+	}
+
+	return base.ResolveReference(u).String(), nil
+}
+
+func (a *App) assignFids(c *fasthttp.Client) {
 	for {
-		result, err := c.Assign(url.Values{"count": []string{"100"}})
-		if err != nil {
-			log.Printf("assign url error: %s", err)
-			a.weedVolumeAssignedUrl <- "err:" + err.Error()
+		r := &AssignResult{}
+		if err := DoGet(c, a.weedMasterURL, r); err != nil || r.Error != "" {
+			errMsg := r.Error
+			if err != nil {
+				errMsg = err.Error()
+			}
+			log.Printf("assign url error: %s", errMsg)
+			a.weedVolumeAssignedUrl <- "err:" + errMsg
 			continue
 		}
 
-		p := "http://" + result.PublicURL + "/" + result.FileID
-		if result.Count <= 0 {
+		p := "http://" + r.PublicURL + "/" + r.FileID
+		if r.Count <= 1 {
 			a.weedVolumeAssignedUrl <- p
 			continue
 		}
 
-		for i := uint64(0); i < result.Count; i++ {
+		for i := 0; i < r.Count; i++ {
 			a.weedVolumeAssignedUrl <- p + fmt.Sprintf("_%d", i+1)
 		}
 	}
 }
 
 // HandleInterrupt handles Ctrl+C to exit after calling f.
-// nolint:gomnd
 func HandleInterrupt(f func(), exitRightNow bool) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt)
@@ -1028,14 +1067,6 @@ func HandleInterrupt(f func(), exitRightNow bool) {
 			os.Exit(0)
 		}
 	}()
-}
-
-// HandleMaxProcs process GOMAXPROCS.
-func HandleMaxProcs() {
-	goMaxProcs := os.Getenv("GOMAXPROCS")
-	if goMaxProcs == "" {
-		runtime.GOMAXPROCS(runtime.NumCPU())
-	}
 }
 
 // IfElse return then if condition is true,  else els if false.
