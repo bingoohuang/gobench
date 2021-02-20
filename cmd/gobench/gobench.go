@@ -76,7 +76,7 @@ type App struct {
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
 
-	connectionChan      chan bool
+	connectionChan      chan struct{}
 	responsePrinter     func(s string)
 	responsePrinterFile *os.File
 	thinkMin            time.Duration
@@ -178,7 +178,7 @@ func (a *App) Init() {
 
 	if a.weedMasterURL != "" {
 		var err error
-		a.weedMasterURL, err = createAssignUri(a.weedMasterURL)
+		a.weedMasterURL, err = CreateUri(a.weedMasterURL, "/dir/assign", map[string]string{"count": "100"})
 		if err != nil {
 			usageAndExit(err.Error())
 		}
@@ -428,9 +428,9 @@ func stating(resultChan chan requestResult, rr *requestResult, totalReqsChan cha
 
 // NewConfiguration create Conf.
 func (a *App) NewConfiguration() (c *Conf) {
-	a.connectionChan = make(chan bool, a.connections)
+	a.connectionChan = make(chan struct{}, a.connections)
 	for i := 0; i < a.connections; i++ {
-		a.connectionChan <- true
+		a.connectionChan <- struct{}{}
 	}
 
 	c = &Conf{
@@ -712,8 +712,6 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 
 	a.tryMethod(c, http.MethodGet)
 
-	<-a.connectionChan
-
 	go func() {
 		if c.postFileChannel == nil { // 非目录文件上传请求
 			a.do(resultChan, c, a.weed(addr), c.method, contentType, fileName, postData)
@@ -738,33 +736,13 @@ type requestResult struct {
 	badFailed     int
 }
 
-func DoGet(c *fasthttp.Client, requestUri string, out interface{}) error {
-	req := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(req)
-	req.SetRequestURI(requestUri)
-
-	rsp := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(rsp)
-	if err := c.Do(req, rsp); err != nil {
-		return err
-	}
-
-	if out != nil {
-		body := rsp.Body()
-		if err := json.Unmarshal(body, out); err != nil {
-			return fmt.Errorf("json Unmarshal %s error %w", body, err)
-		}
-	}
-
-	return nil
-}
-
 func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fileName string, postData []byte) {
 	var (
 		err error
 		rsp *fasthttp.Response
 	)
 
+	<-a.connectionChan
 	statusCode := 0
 
 	if strings.HasPrefix(addr, "err:") {
@@ -773,7 +751,7 @@ func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fi
 		req := fasthttp.AcquireRequest()
 		defer func() {
 			fasthttp.ReleaseRequest(req)
-			a.connectionChan <- true
+			a.connectionChan <- struct{}{}
 		}()
 
 		req.SetRequestURI(addr)
@@ -1015,24 +993,10 @@ type AssignResult struct {
 	Error     string `json:"error,omitempty"`
 }
 
-func createAssignUri(baseUri string) (string, error) {
-	u, _ := url.Parse("/dir/assign")
-	q := u.Query()
-	q.Set("count", "100")
-	u.RawQuery = q.Encode()
-
-	base, err := url.Parse(baseUri)
-	if err != nil {
-		return "", err
-	}
-
-	return base.ResolveReference(u).String(), nil
-}
-
 func (a *App) assignFids(c *fasthttp.Client) {
 	for {
 		r := &AssignResult{}
-		if err := DoGet(c, a.weedMasterURL, r); err != nil || r.Error != "" {
+		if err := FastGet(c, a.weedMasterURL, r); err != nil || r.Error != "" {
 			errMsg := r.Error
 			if err != nil {
 				errMsg = err.Error()
@@ -1256,4 +1220,41 @@ func (hc *HttpClient) Dial(_ string, address string) (net.Conn, error) {
 		return nil, errors.New("Proxy error " + res.Status)
 	}
 	return proxyConn, nil
+}
+
+func CreateUri(baseUri, relativeUri string, query map[string]string) (string, error) {
+	u, _ := url.Parse(relativeUri)
+	q := u.Query()
+	for k, v := range query {
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+
+	base, err := url.Parse(baseUri)
+	if err != nil {
+		return "", err
+	}
+
+	return base.ResolveReference(u).String(), nil
+}
+
+func FastGet(c *fasthttp.Client, requestUri string, out interface{}) error {
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	req.SetRequestURI(requestUri)
+
+	rsp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(rsp)
+	if err := c.Do(req, rsp); err != nil {
+		return err
+	}
+
+	if out != nil {
+		body := rsp.Body()
+		if err := json.Unmarshal(body, out); err != nil {
+			return fmt.Errorf("json Unmarshal %s error %w", body, err)
+		}
+	}
+
+	return nil
 }
