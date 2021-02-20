@@ -743,16 +743,14 @@ func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fi
 	)
 
 	<-a.connectionChan
+	defer func() { a.connectionChan <- struct{}{} }()
 	statusCode := 0
 
 	if strings.HasPrefix(addr, "err:") {
 		err = errors.New("addr-" + addr)
 	} else {
 		req := fasthttp.AcquireRequest()
-		defer func() {
-			fasthttp.ReleaseRequest(req)
-			a.connectionChan <- struct{}{}
-		}()
+		defer fasthttp.ReleaseRequest(req)
 
 		req.SetRequestURI(addr)
 		req.Header.SetMethod(method)
