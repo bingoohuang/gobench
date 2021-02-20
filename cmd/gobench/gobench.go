@@ -178,7 +178,7 @@ func (a *App) Init() {
 
 	if a.weedMasterURL != "" {
 		var err error
-		a.weedMasterURL, err = CreateUri(a.weedMasterURL, "/dir/assign", map[string]string{"count": "100"})
+		a.weedMasterURL, err = CreateUri(a.weedMasterURL, "/dir/assign", map[string]string{"count": "1"})
 		if err != nil {
 			usageAndExit(err.Error())
 		}
