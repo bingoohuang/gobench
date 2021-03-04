@@ -719,22 +719,20 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 
 	a.tryMethod(c, http.MethodGet)
 
-	go func() {
-		if c.postFileChannel == nil { // 非目录文件上传请求
-			a.do(resultChan, c, a.weed(addr), c.method, contentType, fileName, postData)
-			return
+	if c.postFileChannel == nil { // 非目录文件上传请求
+		a.do(resultChan, c, a.weed(addr), c.method, contentType, fileName, postData)
+		return
+	}
+
+	for pf := range c.postFileChannel {
+		data, ct, err := ReadUploadMultipartFile(a.uploadFileName, pf)
+		if err != nil {
+			log.Printf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uploadFilePath, err)
+			continue
 		}
 
-		for pf := range c.postFileChannel {
-			data, ct, err := ReadUploadMultipartFile(a.uploadFileName, pf)
-			if err != nil {
-				log.Printf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uploadFilePath, err)
-				continue
-			}
-
-			a.do(resultChan, c, a.weed(addr), c.method, ct, pf, data)
-		}
-	}()
+		a.do(resultChan, c, a.weed(addr), c.method, ct, pf, data)
+	}
 }
 
 type requestResult struct {
@@ -1090,7 +1088,11 @@ func ReadUploadMultipartFile(filename, filePath string) (imageBytes []byte, cont
 	}
 
 	file := MustOpen(filePath)
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Panicf("close file %s error %v", filePath, err)
+		}
+	}()
 
 	_, _ = io.Copy(part, file)
 
