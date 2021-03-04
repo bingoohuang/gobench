@@ -39,6 +39,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	"github.com/docker/go-units"
+	_ "net/http/pprof"
 )
 
 // App ...
@@ -85,6 +86,7 @@ type App struct {
 	weedVolumeAssignedUrl chan string // 海草文件上传路径地址
 	exitChan              chan bool
 	weedMasterURL         string
+	pprof                 string
 }
 
 // Conf for gobench.
@@ -130,6 +132,7 @@ Options:
   -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
   -v               Print version
   -weed            Weed master URL, like http://127.0.0.1:9333
+  -pprof           Profile pprof address, like localhost:6060
 `
 
 func usageAndExit(msg string) {
@@ -170,6 +173,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.proxy, "x", "", "")
 	flag.StringVar(&a.think, "think", "", "")
 	flag.StringVar(&a.weedMasterURL, "weed", "", "")
+	flag.StringVar(&a.pprof, "pprof", "", "")
 	cond := flag.String("ok", "", "")
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
@@ -313,6 +317,13 @@ func main() {
 		defer func() {
 			app.responsePrinterFile.Close()
 			fmt.Println(app.printResult, " generated!")
+		}()
+	}
+
+	if app.pprof != "" {
+		go func() {
+			log.Printf("Starting pprof at %s", app.pprof)
+			log.Println(http.ListenAndServe(app.pprof, nil))
 		}()
 	}
 
@@ -679,10 +690,6 @@ func (a *App) client(requestsChan chan int, resultChan chan requestResult, conf 
 
 	i := 0
 	for ; !a.exitRequested && (req == 0 || i < req); i++ {
-		if i > 0 {
-			a.thinking()
-		}
-
 		addr := ""
 		if urlIndex >= 0 {
 			addr = conf.urls[urlIndex]
@@ -743,7 +750,12 @@ func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fi
 	)
 
 	<-a.connectionChan
-	defer func() { a.connectionChan <- struct{}{} }()
+
+	defer func() {
+		a.connectionChan <- struct{}{}
+		a.thinking()
+	}()
+
 	statusCode := 0
 
 	if strings.HasPrefix(addr, "err:") {
