@@ -17,8 +17,8 @@ github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a/go.mod h1:l
 github.com/averagesecurityguy/random v0.0.0-20180326012618-37cce341d2af/go.mod h1:xlqW8P0gOqVMB8Kp0mMuUznEi1PzjF+mhHTSC+ymalU=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
-github.com/bingoohuang/golang-trial v0.0.0-20200720023128-6874e943f0ca h1:vk+MMriF8NYlndyNMGZuoa+6Gqyuztn9BOOOo8LWAfE=
-github.com/bingoohuang/golang-trial v0.0.0-20200720023128-6874e943f0ca/go.mod h1:zUEUlD+vTxx1oicV3hBp12SQDaYVPAGg4zIzsQoR6tc=
+github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da h1:dFfvhjt9bhse3nugSi3o6oHEniyi+LulFrt9FN1OIXs=
+github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da/go.mod h1:zUEUlD+vTxx1oicV3hBp12SQDaYVPAGg4zIzsQoR6tc=
 github.com/bingoohuang/gonet v0.0.0-20190716021716-fd516efe8b31/go.mod h1:lSe5gMXAiQESg/xTshM6sByKvDkMGdDffZSXt0d64JI=
 github.com/bingoohuang/goreflect v0.0.0-20200220033105-a0faf449f649/go.mod h1:Jkc9aAuGnMb+GnhLEVtdDnyIZ6Lh6APIITuY+X0HQRU=
 github.com/bingoohuang/gou v0.0.0-20200225004418-9b3655665c46/go.mod h1:lfM/iBkZzlmnl23C+mpqiXAgC6npikzZkKVfNAdC+o4=

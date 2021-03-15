@@ -58,7 +58,7 @@ type App struct {
 	uploadFilePath   string
 
 	keepAlive     bool
-	uploadRandImg bool
+	uploadRandImg string
 	exitRequested bool
 	printResult   string
 
@@ -122,8 +122,8 @@ Options:
   -auth            Authorization header
   -k               HTTP keep-alive (default true)
   -ok              Condition like 'status == 200' for json output
-  -png             Upload random png images by file upload
-  -p.size          Upload fixed img size (eg. 44kB, 17MB)
+  -image           Upload random images by file upload, png/jpg
+  -image.size      Upload fixed img size (eg. 44kB, 17MB)
   -u.file          Upload file path
   -u.name          Upload file name (default "file")
   -r.timeout       Read timeout (like 5ms,10ms,10s) (default 5s)
@@ -163,8 +163,8 @@ func (a *App) Init() {
 	flag.StringVar(&a.postData, "P", "", "")
 	flag.StringVar(&a.uploadFilePath, "u.file", "", "")
 	flag.StringVar(&a.uploadFileName, "u.filename", "file", "")
-	flag.BoolVar(&a.uploadRandImg, "png", false, "")
-	flag.StringVar(&a.fixedImgSize, "p.size", "", "")
+	flag.StringVar(&a.uploadRandImg, "image", "", "")
+	flag.StringVar(&a.fixedImgSize, "image.size", "", "")
 	flag.StringVar(&a.method, "m", "", "")
 	flag.DurationVar(&a.writeTimeout, "w.timeout", 5*time.Second, "")
 	flag.DurationVar(&a.readTimeout, "r.timeout", 5*time.Second, "")
@@ -653,7 +653,7 @@ func (a *App) period(c *Conf) {
 }
 
 // nolint:gomnd
-func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, imageFile string) {
+func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, contentType, imageFile string) {
 	var (
 		err  error
 		size int64
@@ -670,15 +670,22 @@ func (a *App) randomImage(imageSize string) (imageBytes []byte, contentType, ima
 	}
 
 	randText := strconv.FormatUint(randimg.RandUint64(), 10)
-	imageFile = randText + ".png"
-	randimg.GenerateRandomImageFile(640, 320, randText, imageFile, size)
-
+	ext := ".png"
+	if imageExt != "" {
+		ext = "." + imageExt
+	}
+	imageFile = randText + ext
+	rc := randimg.RandImageConfig{
+		Width:      650,
+		Height:     350,
+		RandomText: randText,
+		FileName:   imageFile,
+		FixedSize:  size,
+	}
+	rc.GenerateFile()
 	defer os.Remove(imageFile)
 
-	log.Println("create random image", imageFile, "in size", units.HumanSize(float64(size)))
-
 	imageBytes, contentType, _ = ReadUploadMultipartFile(a.uploadFileName, imageFile)
-
 	return
 }
 
@@ -711,10 +718,10 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 	contentType := c.contentType
 	fileName := ""
 
-	if a.uploadRandImg || a.fixedImgSize != "" {
+	if a.uploadRandImg != "" || a.fixedImgSize != "" {
 		a.tryMethod(c, http.MethodPost)
 
-		postData, contentType, fileName = a.randomImage(a.fixedImgSize)
+		postData, contentType, fileName = a.randomImage(a.uploadRandImg, a.fixedImgSize)
 	}
 
 	a.tryMethod(c, http.MethodGet)
