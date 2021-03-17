@@ -528,11 +528,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 	a.tryMethod(c, http.MethodPost)
 
 	c.postFileChannel = make(chan string, 1)
-
-	if !fs.IsDir() {
-		c.postFileChannel <- a.uploadFilePath
-		return
-	}
+	isSingleFile := !fs.IsDir()
 
 	go func() {
 		errStopped := fmt.Errorf("program stopped")
@@ -540,14 +536,21 @@ func (a *App) dealUploadFilePath(c *Conf) {
 			close(c.postFileChannel)
 		}()
 
-		for {
+		for i := 0; i < a.requestsTotal; {
 			select {
 			case <-a.exitChan:
 				return
 			default:
 			}
 
+			if isSingleFile {
+				c.postFileChannel <- a.uploadFilePath
+				i++
+				continue
+			}
+
 			err := godirwalk.Walk(a.uploadFilePath, &godirwalk.Options{
+				Unsorted: true,
 				Callback: func(osPathname string, de *godirwalk.Dirent) error {
 					if v, e := de.IsDirOrSymlinkToDir(); v || e != nil {
 						return e
@@ -564,17 +567,18 @@ func (a *App) dealUploadFilePath(c *Conf) {
 					}
 
 					c.postFileChannel <- osPathname
+
+					if i++; i >= a.requestsTotal {
+						return errStopped
+					}
+
 					return nil
 				},
-				Unsorted: true,
 			})
 
-			if err != nil {
-				if err != errStopped {
-					log.Printf("Error in walk dir: %s Error: %v", a.uploadFilePath, err)
-				}
+			if err != nil && err != errStopped {
+				log.Printf("Error in walk dir: %s Error: %v", a.uploadFilePath, err)
 			}
-
 		}
 	}()
 }
@@ -627,6 +631,8 @@ func (a *App) period(c *Conf) {
 
 		c.requests = a.requestsTotal / a.goroutines
 		c.firstRequests = a.requestsTotal - c.requests*(a.goroutines-1)
+	} else {
+		a.requestsTotal = c.requests * a.goroutines
 	}
 
 	if c.requests == 0 && period == 0 {
@@ -1009,7 +1015,7 @@ type AssignResult struct {
 }
 
 func (a *App) assignFids(c *fasthttp.Client) {
-	for {
+	for i := 0; i < a.requestsTotal; i++ {
 		r := &AssignResult{}
 		if err := FastGet(c, a.weedMasterURL, r); err != nil || r.Error != "" {
 			errMsg := r.Error
@@ -1027,8 +1033,9 @@ func (a *App) assignFids(c *fasthttp.Client) {
 			continue
 		}
 
-		for i := 0; i < r.Count; i++ {
-			a.weedVolumeAssignedUrl <- p + fmt.Sprintf("_%d", i+1)
+		i += r.Count - 1
+		for j := 0; j < r.Count; j++ {
+			a.weedVolumeAssignedUrl <- p + fmt.Sprintf("_%d", j+1)
 		}
 	}
 }
