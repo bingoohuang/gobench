@@ -3,13 +3,14 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
+	"math/big"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -201,8 +202,6 @@ func (a *App) Init() {
 		os.Exit(0)
 	}
 
-	rand.Seed(time.Now().UnixNano())
-
 	if err := a.parseThinkTime(); err != nil {
 		panic(err)
 	}
@@ -233,6 +232,11 @@ func (a *App) parseCond(cond string) {
 	a.cond = expr
 }
 
+func randInt(n int64) int64 {
+	result, _ := rand.Int(rand.Reader, big.NewInt(n))
+	return result.Int64()
+}
+
 func (a *App) thinking() {
 	if a.thinkMax == 0 {
 		return
@@ -242,7 +246,7 @@ func (a *App) thinking() {
 	if a.thinkMax == a.thinkMin {
 		thinkTime = a.thinkMin
 	} else {
-		thinkTime = time.Duration(rand.Int31n(int32(a.thinkMax-a.thinkMin))) + a.thinkMin
+		thinkTime = time.Duration(randInt(int64(a.thinkMax-a.thinkMin))) + a.thinkMin
 	}
 
 	a.responsePrinter("think " + thinkTime.String() + "...")
@@ -530,8 +534,6 @@ func (a *App) dealUploadFilePath(c *Conf) {
 	c.postFileChannel = make(chan string, 1)
 	isSingleFile := !fs.IsDir()
 
-	rand.Seed(time.Now().UnixNano())
-
 	go func() {
 		errStopped := fmt.Errorf("program stopped")
 		defer func() {
@@ -568,7 +570,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 					default:
 					}
 
-					if rand.Intn(3) == 0 {
+					if randInt(10) != 0 {
 						return nil
 					}
 
@@ -671,7 +673,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 	)
 
 	if imageSize == "" {
-		size = (rand.Int63n(4) + 1) << 20 //  << 20 means MiB
+		size = int64((randInt(4) + 1) << 20) //  << 20 means MiB
 	} else {
 		size, err = units.FromHumanSize(a.fixedImgSize)
 		if err != nil {
@@ -703,7 +705,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 func (a *App) client(requestsChan chan int, resultChan chan requestResult, conf *Conf, req int) {
 	urlIndex := -1
 	if len(conf.urls) > 0 {
-		urlIndex = rand.Intn(len(conf.urls))
+		urlIndex = int(randInt(int64(len(conf.urls))))
 	}
 
 	i := 0
