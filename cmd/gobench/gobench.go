@@ -530,6 +530,8 @@ func (a *App) dealUploadFilePath(c *Conf) {
 	c.postFileChannel = make(chan string, 1)
 	isSingleFile := !fs.IsDir()
 
+	rand.Seed(time.Now().UnixNano())
+
 	go func() {
 		errStopped := fmt.Errorf("program stopped")
 		defer func() {
@@ -566,8 +568,11 @@ func (a *App) dealUploadFilePath(c *Conf) {
 					default:
 					}
 
-					c.postFileChannel <- osPathname
+					if rand.Intn(3) == 0 {
+						return nil
+					}
 
+					c.postFileChannel <- osPathname
 					if i++; i >= a.requestsTotal {
 						return errStopped
 					}
