@@ -45,35 +45,14 @@ import (
 
 // App ...
 type App struct {
-	requests      int
-	requestsTotal int
-
-	goroutines  int
-	connections int
-
-	method           string
-	duration         string
-	urls             string
-	postData         string
-	postDataFilePath string
-	uploadFilePath   string
-
-	keepAlive     bool
-	uploadRandImg string
-	exitRequested bool
-	printResult   string
-
-	writeTimeout    time.Duration
-	readTimeout     time.Duration
-	readThroughput  uint64
-	writeThroughput uint64
-
-	authHeader     string
-	uploadFileName string
-	fixedImgSize   string
-	contentType    string
-	think          string
-	proxy          string
+	requests, requestsTotal, goroutines, connections               int
+	method, duration, urls, postData, uFilePath                    string
+	keepAlive, exitRequested                                       bool
+	uploadRandImg, printResult                                     string
+	wTimeout, rTimeout, thinkMin, thinkMax                         time.Duration
+	rThroughput, wThroughput                                       uint64
+	authHeader, uFileName, fixedImgSize, contentType, think, proxy string
+	weedMasterURL, pprof                                           string
 
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
@@ -81,28 +60,21 @@ type App struct {
 	connectionChan      chan struct{}
 	responsePrinter     func(s string)
 	responsePrinterFile *os.File
-	thinkMin            time.Duration
-	thinkMax            time.Duration
 
 	weedVolumeAssignedUrl chan string // 海草文件上传路径地址
 	exitChan              chan bool
-	weedMasterURL         string
-	pprof                 string
 }
 
 // Conf for gobench.
 type Conf struct {
-	urls        []string
-	method      string
-	postData    []byte
-	requests    int
-	duration    time.Duration
-	keepAlive   bool
-	authHeader  string
-	contentType string
+	urls                            []string
+	postData                        []byte
+	requests, firstRequests         int
+	duration                        time.Duration
+	keepAlive                       bool
+	method, authHeader, contentType string
 
 	myClient        fasthttp.Client
-	firstRequests   int
 	postFileChannel chan string
 }
 
@@ -114,17 +86,16 @@ Options:
   -n               Number of total requests
   -t               Number of concurrent goroutines (default 100)
   -r               Number of requests per goroutine
-  -d               Duration of time (eg 10s, 10m, 2h45m) (default "0s")
-  -p               Print something. 0:Print http response; 1:with extra newline; x.log: log file
+  -d               Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
+  -p               Print something. 0: Print http response; 1: with extra newline; x.log: log file
   -x               Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
-  -P               POST data
-  -p.file          POST data file path
+  -P               POST data, use @a.json for a file
   -c.type          Content-Type, eg, json, plain, or other full name
   -auth            Authorization header
   -k               HTTP keep-alive (default true)
   -ok              Condition like 'status == 200' for json output
   -image           Upload random images by file upload, png/jpg
-  -image.size      Upload fixed img size (eg. 44kB, 17MB)
+  -i.size          Upload fixed img size (eg. 44kB, 17MB)
   -u.file          Upload file path
   -u.name          Upload file name (default "file")
   -r.timeout       Read timeout (like 5ms,10ms,10s) (default 5s)
@@ -160,15 +131,14 @@ func (a *App) Init() {
 	flag.StringVar(&a.urls, "u", "", "")
 	flag.BoolVar(&a.keepAlive, "k", true, "")
 	flag.StringVar(&a.printResult, "p", "", "")
-	flag.StringVar(&a.postDataFilePath, "p.file", "", "")
 	flag.StringVar(&a.postData, "P", "", "")
-	flag.StringVar(&a.uploadFilePath, "u.file", "", "")
-	flag.StringVar(&a.uploadFileName, "u.filename", "file", "")
+	flag.StringVar(&a.uFilePath, "u.file", "", "")
+	flag.StringVar(&a.uFileName, "u.filename", "file", "")
 	flag.StringVar(&a.uploadRandImg, "image", "", "")
-	flag.StringVar(&a.fixedImgSize, "image.size", "", "")
+	flag.StringVar(&a.fixedImgSize, "i.size", "", "")
 	flag.StringVar(&a.method, "m", "", "")
-	flag.DurationVar(&a.writeTimeout, "w.timeout", 5*time.Second, "")
-	flag.DurationVar(&a.readTimeout, "r.timeout", 5*time.Second, "")
+	flag.DurationVar(&a.wTimeout, "w.timeout", 5*time.Second, "")
+	flag.DurationVar(&a.rTimeout, "r.timeout", 5*time.Second, "")
 	flag.StringVar(&a.authHeader, "auth", "", "")
 	flag.StringVar(&a.contentType, "c.type", "", "")
 	flag.StringVar(&a.proxy, "x", "", "")
@@ -180,6 +150,10 @@ func (a *App) Init() {
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
 
 	flag.Parse()
+	if *version {
+		fmt.Println("v1.0.2 at 2020-09-07 09:46:32")
+		os.Exit(0)
+	}
 
 	if a.weedMasterURL != "" {
 		var err error
@@ -194,13 +168,7 @@ func (a *App) Init() {
 	}
 
 	runtime.GOMAXPROCS(*cpus)
-
 	a.parseCond(*cond)
-
-	if *version {
-		fmt.Println("v1.0.2 at 2020-09-07 09:46:32")
-		os.Exit(0)
-	}
 
 	if err := a.parseThinkTime(); err != nil {
 		panic(err)
@@ -394,9 +362,9 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 	}
 	fmt.Fprintf(w, "Successful requests rate:\t%d hits/sec\n", uint64(float64(rr.success)/elapsedSeconds))
 	fmt.Fprintf(w, "Read throughput:\t%s/sec\n",
-		humanize.IBytes(uint64(float64(a.readThroughput)/elapsedSeconds)))
+		humanize.IBytes(uint64(float64(a.rThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Write throughput:\t%s/sec\n",
-		humanize.IBytes(uint64(float64(a.writeThroughput)/elapsedSeconds)))
+		humanize.IBytes(uint64(float64(a.wThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Test time:\t%s(%s-%s)\n", elapsed.Round(time.Millisecond).String(),
 		startTime.Format("2006-01-02 15:04:05.000"), endTime.Format("15:04:05.000"))
 	w.Flush()
@@ -465,8 +433,8 @@ func (a *App) NewConfiguration() (c *Conf) {
 	a.dealPostDataFilePath(c)
 	a.dealUploadFilePath(c)
 
-	c.myClient.ReadTimeout = a.readTimeout
-	c.myClient.WriteTimeout = a.writeTimeout
+	c.myClient.ReadTimeout = a.rTimeout
+	c.myClient.WriteTimeout = a.wTimeout
 	c.myClient.MaxConnsPerHost = a.connections
 	c.myClient.Dial = a.MyDialer()
 
@@ -516,16 +484,16 @@ func (a *App) processUrls(c *Conf) {
 }
 
 func (a *App) dealUploadFilePath(c *Conf) {
-	if a.uploadFilePath == "" {
+	if a.uFilePath == "" {
 		return
 	}
 
-	fs, err := os.Stat(a.uploadFilePath)
+	fs, err := os.Stat(a.uFilePath)
 	if err != nil && os.IsNotExist(err) {
-		log.Fatalf("%s dos not exist", a.uploadFilePath)
+		log.Fatalf("%s dos not exist", a.uFilePath)
 	}
 	if err != nil {
-		log.Fatalf("stat file %s error  %v", a.uploadFilePath, err)
+		log.Fatalf("stat file %s error  %v", a.uFilePath, err)
 	}
 
 	// 单个上传文件
@@ -548,12 +516,12 @@ func (a *App) dealUploadFilePath(c *Conf) {
 			}
 
 			if isSingleFile {
-				c.postFileChannel <- a.uploadFilePath
+				c.postFileChannel <- a.uFilePath
 				i++
 				continue
 			}
 
-			err := godirwalk.Walk(a.uploadFilePath, &godirwalk.Options{
+			err := godirwalk.Walk(a.uFilePath, &godirwalk.Options{
 				Unsorted: true,
 				Callback: func(osPathname string, de *godirwalk.Dirent) error {
 					if v, e := de.IsDirOrSymlinkToDir(); v || e != nil {
@@ -584,14 +552,14 @@ func (a *App) dealUploadFilePath(c *Conf) {
 			})
 
 			if err != nil && err != errStopped {
-				log.Printf("Error in walk dir: %s Error: %v", a.uploadFilePath, err)
+				log.Printf("Error in walk dir: %s Error: %v", a.uFilePath, err)
 			}
 		}
 	}()
 }
 
 func (a *App) dealPostDataFilePath(c *Conf) {
-	if a.postDataFilePath == "" && a.postData == "" {
+	if a.postData == "" {
 		return
 	}
 
@@ -600,13 +568,15 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 	a.tryMethod(c, http.MethodPost)
 
 	if a.postData != "" {
-		c.postData = []byte(a.postData)
-	} else if a.postDataFilePath != "" {
-		c.postData, err = ioutil.ReadFile(a.postDataFilePath)
-	}
-
-	if err != nil {
-		log.Fatalf("Error in ioutil.ReadFile for file path: %s Error: %v", a.postDataFilePath, err)
+		if strings.HasPrefix(a.postData, "@") {
+			postDataFile := a.postData[1:]
+			c.postData, err = ioutil.ReadFile(postDataFile)
+			if err != nil {
+				log.Fatalf("Error in ioutil.ReadFile for file path: %s Error: %v", postDataFile, err)
+			}
+		} else {
+			c.postData = []byte(a.postData)
+		}
 	}
 
 	if a.contentType == "" && len(c.postData) > 0 {
@@ -673,12 +643,10 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 	)
 
 	if imageSize == "" {
-		size = int64((randInt(4) + 1) << 20) //  << 20 means MiB
+		size = (randInt(4) + 1) << 20 //  << 20 means MiB
 	} else {
-		size, err = units.FromHumanSize(a.fixedImgSize)
-		if err != nil {
-			fmt.Println("error fixedImgSize " + err.Error())
-			panic(err)
+		if size, err = units.FromHumanSize(a.fixedImgSize); err != nil {
+			log.Fatal("error fixedImgSize ", err.Error())
 		}
 	}
 
@@ -698,7 +666,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 	rc.GenerateFile()
 	defer os.Remove(imageFile)
 
-	imageBytes, contentType, _ = ReadUploadMultipartFile(a.uploadFileName, imageFile)
+	imageBytes, contentType, _ = ReadUploadMultipartFile(a.uFileName, imageFile)
 	return
 }
 
@@ -745,9 +713,9 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 	}
 
 	for pf := range c.postFileChannel {
-		data, ct, err := ReadUploadMultipartFile(a.uploadFileName, pf)
+		data, ct, err := ReadUploadMultipartFile(a.uFileName, pf)
 		if err != nil {
-			log.Printf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uploadFilePath, err)
+			log.Printf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uFilePath, err)
 			continue
 		}
 
@@ -756,16 +724,12 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 }
 
 type requestResult struct {
-	networkFailed int
-	success       int
-	badFailed     int
+	networkFailed, success, badFailed int
 }
 
 func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fileName string, postData []byte) {
-	var (
-		err error
-		rsp *fasthttp.Response
-	)
+	var err error
+	var rsp *fasthttp.Response
 
 	<-a.connectionChan
 
@@ -887,7 +851,7 @@ type MyConn struct {
 // Read bytes from net connection.
 func (myConn *MyConn) Read(b []byte) (n int, err error) {
 	if n, err = myConn.Conn.Read(b); err == nil {
-		atomic.AddUint64(&myConn.app.readThroughput, uint64(n))
+		atomic.AddUint64(&myConn.app.rThroughput, uint64(n))
 	}
 
 	return
@@ -896,7 +860,7 @@ func (myConn *MyConn) Read(b []byte) (n int, err error) {
 // Write bytes to net.
 func (myConn *MyConn) Write(b []byte) (n int, err error) {
 	if n, err = myConn.Conn.Write(b); err == nil {
-		atomic.AddUint64(&myConn.app.writeThroughput, uint64(n))
+		atomic.AddUint64(&myConn.app.wThroughput, uint64(n))
 	}
 
 	return
@@ -919,10 +883,8 @@ func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 	}
 }
 
-var (
-	re1 = regexp.MustCompile(`\r?\n`)
-	re2 = regexp.MustCompile(`\s{2,}`)
-)
+var re1 = regexp.MustCompile(`\r?\n`)
+var re2 = regexp.MustCompile(`\s{2,}`)
 
 func line(s string) string {
 	s = re1.ReplaceAllString(s, " ")
@@ -931,10 +893,7 @@ func line(s string) string {
 	return s
 }
 
-// nolint:gochecknoglobals
-var (
-	lastResponseCh chan string
-)
+var lastResponseCh chan string
 
 func (a *App) setupResponsePrinter() {
 	var f func(a string, direct bool)
@@ -1116,7 +1075,6 @@ func ReadUploadMultipartFile(filename, filePath string) (imageBytes []byte, cont
 	}()
 
 	_, _ = io.Copy(part, file)
-
 	_ = writer.Close()
 
 	return buffer.Bytes(), writer.FormDataContentType(), nil
@@ -1124,16 +1082,12 @@ func ReadUploadMultipartFile(filename, filePath string) (imageBytes []byte, cont
 
 // Throttle ...
 type Throttle struct {
-	tokenC chan bool
-	stopC  chan bool
+	tokenC, stopC chan bool
 }
 
 // MakeThrottle ...
 func MakeThrottle(duration time.Duration) *Throttle {
-	t := &Throttle{
-		tokenC: make(chan bool, 1),
-		stopC:  make(chan bool, 1),
-	}
+	t := &Throttle{tokenC: make(chan bool, 1), stopC: make(chan bool, 1)}
 
 	go func() {
 		ticker := time.NewTicker(duration)
@@ -1156,9 +1110,7 @@ func MakeThrottle(duration time.Duration) *Throttle {
 }
 
 // Stop ...
-func (t *Throttle) Stop() {
-	t.stopC <- true
-}
+func (t *Throttle) Stop() { t.stopC <- true }
 
 // Allow ...
 func (t *Throttle) Allow() bool {
@@ -1201,8 +1153,7 @@ type DefaultClient struct {
 // Set KeepAlive=-1 to reduce the call of syscall
 func (dc *DefaultClient) Dial(network string, address string) (conn net.Conn, err error) {
 	if dc.rAddr == nil {
-		dc.rAddr, err = net.ResolveTCPAddr("tcp", address)
-		if err != nil {
+		if dc.rAddr, err = net.ResolveTCPAddr("tcp", address); err != nil {
 			return nil, err
 		}
 	}
