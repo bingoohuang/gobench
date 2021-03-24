@@ -45,14 +45,14 @@ import (
 
 // App ...
 type App struct {
-	requests, requestsTotal, goroutines, connections               int
-	method, duration, urls, postData, uFilePath                    string
-	keepAlive, exitRequested                                       bool
-	uploadRandImg, printResult                                     string
-	wTimeout, rTimeout, thinkMin, thinkMax                         time.Duration
-	rThroughput, wThroughput                                       uint64
-	authHeader, uFileName, fixedImgSize, contentType, think, proxy string
-	weedMasterURL, pprof                                           string
+	requests, requestsTotal, goroutines, connections                int
+	method, duration, urls, postData, uFilePath                     string
+	keepAlive, exitRequested                                        bool
+	uploadRandImg, printResult                                      string
+	wTimeout, rTimeout, thinkMin, thinkMax                          time.Duration
+	rThroughput, wThroughput                                        uint64
+	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
+	weedMasterURL, pprof                                            string
 
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
@@ -80,7 +80,7 @@ type Conf struct {
 
 const usage = `Usage: gobench [options...] url1[,url2...]
 Options:
-  -u               URL list (comma separated), or @URL's file path (line separated)
+  -l               URL list (comma separated), or @URL's file path (line separated)
   -m               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
   -c               Number of connections (default 100)
   -n               Number of total requests
@@ -97,7 +97,7 @@ Options:
   -image           Upload random images by file upload, png/jpg
   -i.size          Upload fixed img size (eg. 44kB, 17MB)
   -u.file          Upload file path
-  -u.name          Upload file name (default "file")
+  -u.field         Upload field name (default "file")
   -r.timeout       Read timeout (like 5ms,10ms,10s) (default 5s)
   -w.timeout       Write timeout (like 5ms,10ms,10s) (default 5s)
   -cpus            Number of used cpu cores. (default for current machine is %d cores)
@@ -128,12 +128,12 @@ func (a *App) Init() {
 	flag.IntVar(&a.requests, "r", 0, "")
 	flag.IntVar(&a.requestsTotal, "n", 0, "")
 	flag.StringVar(&a.duration, "d", "0s", "")
-	flag.StringVar(&a.urls, "u", "", "")
+	flag.StringVar(&a.urls, "l", "", "")
 	flag.BoolVar(&a.keepAlive, "k", true, "")
 	flag.StringVar(&a.printResult, "p", "", "")
 	flag.StringVar(&a.postData, "P", "", "")
 	flag.StringVar(&a.uFilePath, "u.file", "", "")
-	flag.StringVar(&a.uFileName, "u.filename", "file", "")
+	flag.StringVar(&a.uFieldName, "u.field", "file", "")
 	flag.StringVar(&a.uploadRandImg, "image", "", "")
 	flag.StringVar(&a.fixedImgSize, "i.size", "", "")
 	flag.StringVar(&a.method, "m", "", "")
@@ -151,7 +151,7 @@ func (a *App) Init() {
 
 	flag.Parse()
 	if *version {
-		fmt.Println("v1.0.2 at 2020-09-07 09:46:32")
+		fmt.Println("v1.0.3 at 2021-03-24 23:04:19")
 		os.Exit(0)
 	}
 
@@ -164,7 +164,10 @@ func (a *App) Init() {
 	}
 
 	if flag.NArg() > 0 {
-		usageAndExit("")
+		if a.urls != "" {
+			usageAndExit("")
+		}
+		a.urls = strings.Join(flag.Args(), ",")
 	}
 
 	runtime.GOMAXPROCS(*cpus)
@@ -666,7 +669,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 	rc.GenerateFile()
 	defer os.Remove(imageFile)
 
-	imageBytes, contentType, _ = ReadUploadMultipartFile(a.uFileName, imageFile)
+	imageBytes, contentType, _ = ReadUploadMultipartFile(a.uFieldName, imageFile)
 	return
 }
 
@@ -713,7 +716,7 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 	}
 
 	for pf := range c.postFileChannel {
-		data, ct, err := ReadUploadMultipartFile(a.uFileName, pf)
+		data, ct, err := ReadUploadMultipartFile(a.uFieldName, pf)
 		if err != nil {
 			log.Printf("Error in ReadUploadMultipartFile for file path: %s Error: %v", a.uFilePath, err)
 			continue
@@ -1058,11 +1061,11 @@ func MustOpen(f string) *os.File {
 
 // ReadUploadMultipartFile read file filePath for upload in multipart,
 // return multipart content, form data content type and error.
-func ReadUploadMultipartFile(filename, filePath string) (imageBytes []byte, contentType string, err error) {
+func ReadUploadMultipartFile(fieldName, filePath string) (imageBytes []byte, contentType string, err error) {
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
-	part, err := writer.CreateFormFile(filename, filepath.Base(filePath))
+	part, err := writer.CreateFormFile(fieldName, filepath.Base(filePath))
 	if err != nil {
 		return nil, "", err
 	}

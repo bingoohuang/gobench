@@ -16,3 +16,4 @@ gobench/gobench
 
 spring-boot-upload-server/target
 gobench/out.txt
+/httplive.db

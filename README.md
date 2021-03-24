@@ -3,52 +3,53 @@
 a HTTP/HTTPS load testing and benchmarking tool supporting http uploading. Originated from [gobench](https://github.com/cmpxchg16/gobench).
 
 ```bash
-$ gobench -u http://127.0.0.1:5003/api/demo -n 1000
-Dispatching 100 goroutines
+$ gobench http://127.0.0.1:5003/api/demo  
+Dispatching 100 goroutines at 2021-03-24 23:25:57.176
 Waiting for results...
 
-Total Requests:                 1000 hits
-Successful requests:            1000 hits
+Total Requests:                 664004 hits
+Successful requests:            664004 hits
 Network failed:                 0 hits
 Bad requests(!2xx):             0 hits
-Successful requests rate:       10754 hits/sec
-Read throughput:                2.9 MiB/sec
-Write throughput:               987 KiB/sec
-Test time:                      92.985453ms
+Successful requests rate:       66391 hits/sec
+Read throughput:                19 MiB/sec
+Write throughput:               6.0 MiB/sec
+Test time:                      10.001s(2021-03-24 23:25:57.176-23:26:07.177)
 
-$ gobench
-Usage: gobench [options...]
 
+$ gobench -h
+Usage: gobench [options...] url1[,url2...]
 Options:
-  -u URL list (comma separated), or @URL's file path (line separated)
-  -m HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
-  -c Number of connections (default 100)
-  -n Number of total requests
-  -t Number of concurrent goroutines (default 100)
-  -d Duration of time (eg 10s, 10m, 2h45m) (default "0s")
-  -p 0:Print http response; 1:with extra newline; x.log: log file
-  -x proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
-  -post HTTP POST data
-  -post.file  HTTP POST data file path
-  -content.type Content-Type, eg, json, plain, or other full name
-  -head.auth Authorization header
-  -keepalive HTTP keep-alive (default true)
-  -ok condition like 'status == 200' for json output
-  -png Upload random png images by file upload
-  -png.size Upload fixed img size (eg. 44kB, 17MB)
-  -upload.file HTTP upload file path
-  -upload.filename  Upload file name (default "file")
-  -r  Number of requests per goroutine
-  -read.timeout  Read timeout (in milliseconds) (default 5000)
-  -write.timeout Write timeout (in milliseconds) (default 5000)
-  -cpus Number of used cpu cores. (default for current machine is 12 cores)
-  -think Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
-  -v Print version
+  -l               URL list (comma separated), or @URL's file path (line separated)
+  -m               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
+  -c               Number of connections (default 100)
+  -n               Number of total requests
+  -t               Number of concurrent goroutines (default 100)
+  -r               Number of requests per goroutine
+  -d               Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
+  -p               Print something. 0: Print http response; 1: with extra newline; x.log: log file
+  -x               Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
+  -P               POST data, use @a.json for a file
+  -c.type          Content-Type, eg, json, plain, or other full name
+  -auth            Authorization header
+  -k               HTTP keep-alive (default true)
+  -ok              Condition like 'status == 200' for json output
+  -image           Upload random images by file upload, png/jpg
+  -i.size          Upload fixed img size (eg. 44kB, 17MB)
+  -u.file          Upload file path
+  -u.field         Upload field name (default "file")
+  -r.timeout       Read timeout (like 5ms,10ms,10s) (default 5s)
+  -w.timeout       Write timeout (like 5ms,10ms,10s) (default 5s)
+  -cpus            Number of used cpu cores. (default for current machine is 12 cores)
+  -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
+  -v               Print version
+  -weed            Weed master URL, like http://127.0.0.1:9333
+  -pprof           Profile pprof address, like localhost:6060
 ```
 
 ## Features
 
-- [x] [seeweedfs](https://github.com/chrislusf/seaweedfs) bench support like `gobench -weed=http://192.168.126.5:3333 -upload.file=./weedfiles -n=10000 -think 100-500ms -p 1`
+- [x] [seeweedfs](https://github.com/chrislusf/seaweedfs) bench support like `gobench -weed=http://192.168.126.5:3333 -u.file=./weedfiles -n=10000 -think 100-500ms -p 1`
 
 HTTP upload server benchmark in few languages/frameworks and gobench tool
 
@@ -150,4 +151,5 @@ Environment:
 
 ## resources
 
+1. [codesenberg/bombardier(https://github.com/codesenberg/bombardier)
 1. [denji/awesome-http-benchmark](https://github.com/denji/awesome-http-benchmark)
