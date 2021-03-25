@@ -151,5 +151,3 @@ Environment:
 
 ## resources
 
-1. [codesenberg/bombardier(https://github.com/codesenberg/bombardier)
-1. [denji/awesome-http-benchmark](https://github.com/denji/awesome-http-benchmark)

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/cheggaaa/pb/v3"
 	"io"
 	"io/ioutil"
 	"log"
@@ -307,8 +308,7 @@ func main() {
 	HandleInterrupt(func() { app.exitRequested = true }, false)
 
 	c := app.NewConfiguration()
-	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines,
-		startTime.Format("2006-01-02 15:04:05.000"))
+	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines, startTime.Format("2006-01-02 15:04:05.000"))
 
 	app.setupWeed(&c.myClient)
 
@@ -320,6 +320,30 @@ func main() {
 	go stating(resultChan, &rr, totalReqsChan, statComplete)
 
 	requestsChan := make(chan int, app.goroutines)
+	barIncr := func() {}
+	barFinish := func() {}
+	if app.printResult == "" {
+		if app.requestsTotal > 0 {
+			bar := pb.StartNew(app.requestsTotal)
+			barIncr = func() { bar.Increment() }
+			barFinish = func() { bar.Finish() }
+		} else {
+			bar := pb.StartNew(int(c.duration.Seconds()))
+			barFinish = func() { bar.Finish() }
+			go func() {
+				ticker := time.NewTicker(1 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						if bar.Increment(); bar.Current() >= bar.Total() {
+							return
+						}
+					}
+				}
+			}()
+		}
+	}
 
 	for i := 0; i < app.goroutines; i++ {
 		reqs := c.requests
@@ -327,10 +351,9 @@ func main() {
 			reqs = c.firstRequests
 		}
 
-		go app.client(requestsChan, resultChan, c, reqs)
+		go app.client(barIncr, requestsChan, resultChan, c, reqs)
 	}
 
-	fmt.Println("Waiting for results...")
 	totalRequests := app.waitResults(requestsChan, totalReqsChan, statComplete)
 
 	select {
@@ -342,6 +365,7 @@ func main() {
 		close(app.exitChan)
 	}
 
+	barFinish()
 	app.printResults(startTime, totalRequests, rr)
 }
 
@@ -673,7 +697,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 	return
 }
 
-func (a *App) client(requestsChan chan int, resultChan chan requestResult, conf *Conf, req int) {
+func (a *App) client(barIncr func(), requestsChan chan int, resultChan chan requestResult, conf *Conf, req int) {
 	urlIndex := -1
 	if len(conf.urls) > 0 {
 		urlIndex = int(randInt(int64(len(conf.urls))))
@@ -692,6 +716,8 @@ func (a *App) client(requestsChan chan int, resultChan chan requestResult, conf 
 				urlIndex = 0
 			}
 		}
+
+		barIncr()
 	}
 
 	requestsChan <- i
