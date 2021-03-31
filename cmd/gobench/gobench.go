@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/bingoohuang/jj"
 	"github.com/cheggaaa/pb/v3"
 	"io"
 	"io/ioutil"
@@ -64,6 +65,9 @@ type App struct {
 
 	weedVolumeAssignedUrl chan string // 海草文件上传路径地址
 	exitChan              chan bool
+
+	body, bodyCond string
+	bodyPrintCh    chan string
 }
 
 // Conf for gobench.
@@ -106,6 +110,8 @@ Options:
   -v               Print version
   -weed            Weed master URL, like http://127.0.0.1:9333
   -pprof           Profile pprof address, like localhost:6060
+  -body            A filename to save response body.
+  -b.cond          An jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
 `
 
 func usageAndExit(msg string) {
@@ -146,6 +152,8 @@ func (a *App) Init() {
 	flag.StringVar(&a.think, "think", "", "")
 	flag.StringVar(&a.weedMasterURL, "weed", "", "")
 	flag.StringVar(&a.pprof, "pprof", "", "")
+	flag.StringVar(&a.body, "body", "", "")
+	flag.StringVar(&a.bodyCond, "b.cond", "", "")
 	cond := flag.String("ok", "", "")
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
@@ -180,6 +188,7 @@ func (a *App) Init() {
 
 	a.exitChan = make(chan bool)
 	a.setupResponsePrinter()
+	a.setupBodyPrint()
 
 	singalCh := make(chan os.Signal)
 	signal.Notify(singalCh, os.Interrupt, syscall.SIGTERM)
@@ -365,6 +374,10 @@ func main() {
 		close(app.exitChan)
 	}
 
+	if app.bodyPrintCh != nil {
+		close(app.bodyPrintCh)
+	}
+
 	barFinish()
 	app.printResults(startTime, totalRequests, rr)
 }
@@ -506,6 +519,18 @@ func (a *App) processUrls(c *Conf) {
 
 		if addr != "" {
 			c.urls = append(c.urls, addr)
+		}
+	}
+
+	for i, u := range c.urls {
+		if strings.HasPrefix(u, ":") {
+			if u == ":" {
+				c.urls[i] = "http://localhost/"
+			} else if len(u) > 1 && u[1] != '/' { // like :8080
+				c.urls[i] = "http://localhost" + u
+			} else { // like ://127.0.0.1:8080/abc
+				c.urls[i] = "http://localhost" + u[1:]
+			}
 		}
 	}
 }
@@ -842,6 +867,11 @@ func (a *App) isOK(resp *fasthttp.Response) bool {
 }
 
 func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+	body := string(resp.Body())
+	if a.bodyPrintCh != nil {
+		a.bodyPrintCh <- body
+	}
+
 	if a.responsePrinter == nil || resp == nil {
 		return
 	}
@@ -857,7 +887,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 
 	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] "
 
-	if body := string(resp.Body()); body != "" {
+	if body != "" {
 		r += body
 	}
 
@@ -980,6 +1010,29 @@ func (a *App) setupResponsePrinter() {
 	a.responsePrinter = func(a string) {
 		lastResponseCh <- a
 	}
+}
+
+func (a *App) setupBodyPrint() {
+	if a.body == "" {
+		return
+	}
+
+	a.bodyPrintCh = make(chan string, 10000)
+
+	f, err := os.OpenFile(a.body, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+
+	go func() {
+		for body := range a.bodyPrintCh {
+			if a.bodyCond != "" {
+				body = jj.Get(body, a.bodyCond).String()
+			}
+			_, _ = f.Write([]byte(body + "\n"))
+		}
+		f.Close()
+	}()
 }
 
 func (a *App) weed(addr string) string {
