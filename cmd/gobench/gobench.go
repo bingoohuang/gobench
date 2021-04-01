@@ -85,7 +85,7 @@ type Conf struct {
 
 const usage = `Usage: gobench [options...] url1[,url2...]
 Options:
-  -l               URL list (comma separated), or @URL's file path (line separated)
+  -l               URL list (# separated), or @URL's file path (line separated)
   -m               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
   -c               Number of connections (default 100)
   -n               Number of total requests
@@ -499,27 +499,7 @@ func (a *App) processUrls(c *Conf) {
 			log.Fatalf("Error in ioutil.ReadFile for file: %s Error: %v", urlsFilePath, err)
 		}
 	} else {
-		parts := strings.Split(a.urls, ",")
-		addr := ""
-		for i := 0; i < len(parts); i++ {
-			if i == 0 {
-				addr = parts[0]
-				continue
-			}
-
-			if strings.HasPrefix(parts[i], "http:") || strings.HasPrefix(parts[i], "https:") {
-				if addr != "" {
-					c.urls = append(c.urls, addr)
-				}
-				addr = addr[:0]
-			} else {
-				addr += "," + parts[i]
-			}
-		}
-
-		if addr != "" {
-			c.urls = append(c.urls, addr)
-		}
+		c.urls = strings.Split(a.urls, "#")
 	}
 
 	for i, u := range c.urls {
