@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"text/tabwriter"
@@ -66,8 +67,9 @@ type App struct {
 	weedVolumeAssignedUrl chan string // 海草文件上传路径地址
 	exitChan              chan bool
 
-	body, bodyCond string
-	bodyPrintCh    chan string
+	body        string
+	bodyPrintCh chan string
+	waitGroup   *sync.WaitGroup
 }
 
 // Conf for gobench.
@@ -110,8 +112,7 @@ Options:
   -v               Print version
   -weed            Weed master URL, like http://127.0.0.1:9333
   -pprof           Profile pprof address, like localhost:6060
-  -body            A filename to save response body.
-  -b.cond          An jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
+  -body[:cond]     A filename to save response body, with an optinal jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
 `
 
 func usageAndExit(msg string) {
@@ -153,7 +154,6 @@ func (a *App) Init() {
 	flag.StringVar(&a.weedMasterURL, "weed", "", "")
 	flag.StringVar(&a.pprof, "pprof", "", "")
 	flag.StringVar(&a.body, "body", "", "")
-	flag.StringVar(&a.bodyCond, "b.cond", "", "")
 	cond := flag.String("ok", "", "")
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
@@ -187,6 +187,7 @@ func (a *App) Init() {
 	}
 
 	a.exitChan = make(chan bool)
+	a.waitGroup = &sync.WaitGroup{}
 	a.setupResponsePrinter()
 	a.setupBodyPrint()
 
@@ -377,8 +378,13 @@ func main() {
 	if app.bodyPrintCh != nil {
 		close(app.bodyPrintCh)
 	}
+	if app.responsePrinter != nil {
+		app.responsePrinter(CloseString)
+	}
 
 	barFinish()
+
+	app.waitGroup.Wait()
 	app.printResults(startTime, totalRequests, rr)
 }
 
@@ -847,6 +853,10 @@ func (a *App) isOK(resp *fasthttp.Response) bool {
 }
 
 func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+	if a.bodyPrintCh == nil && (a.responsePrinter == nil || resp == nil) {
+		return
+	}
+
 	body := string(resp.Body())
 	if a.bodyPrintCh != nil {
 		a.bodyPrintCh <- body
@@ -932,8 +942,6 @@ func line(s string) string {
 	return s
 }
 
-var lastResponseCh chan string
-
 func (a *App) setupResponsePrinter() {
 	var f func(a string, direct bool)
 
@@ -961,6 +969,7 @@ func (a *App) setupResponsePrinter() {
 		if err != nil {
 			panic(err)
 		}
+		fmt.Printf("Log file %s created or appended!\n", r)
 
 		a.responsePrinterFile = lf
 		f = func(s string, direct bool) {
@@ -972,25 +981,33 @@ func (a *App) setupResponsePrinter() {
 		}
 	}
 
-	lastResponseCh = make(chan string, 10000)
+	responseCh := make(chan string, 10000)
+	a.waitGroup.Add(1)
 	go func() {
-		lastResponse := ""
-		lastResponseThrottle := MakeThrottle(1 * time.Second)
-		for a := range lastResponseCh {
-			if lastResponse == "" || lastResponse != a {
+		defer a.waitGroup.Done()
+
+		last := ""
+		for a := range responseCh {
+			if last == "" || last != a {
 				f(a, false)
-			} else if lastResponseThrottle.Allow() {
+			} else {
 				f(".", true)
 			}
 
-			lastResponse = a
+			last = a
 		}
 	}()
 
 	a.responsePrinter = func(a string) {
-		lastResponseCh <- a
+		if a == CloseString {
+			close(responseCh)
+		} else {
+			responseCh <- a
+		}
 	}
 }
+
+const CloseString = "<close>"
 
 func (a *App) setupBodyPrint() {
 	if a.body == "" {
@@ -999,15 +1016,28 @@ func (a *App) setupBodyPrint() {
 
 	a.bodyPrintCh = make(chan string, 10000)
 
-	f, err := os.OpenFile(a.body, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
+	bodyFile := a.body
+	boydCond := ""
+	if p := strings.Index(a.body, ":"); p > 0 {
+		bodyFile = a.body[:p]
+		boydCond = a.body[p+1:]
+	}
+
+	f, err := os.OpenFile(bodyFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Printf("Reponse body file %s created or appended!\n", bodyFile)
 
+	a.waitGroup.Add(1)
 	go func() {
+		defer a.waitGroup.Done()
+
 		for body := range a.bodyPrintCh {
-			if a.bodyCond != "" {
-				body = jj.Get(body, a.bodyCond).String()
+			if boydCond != "" {
+				body = jj.Get(body, boydCond).String()
+			} else {
+				body = string(jj.Ugly([]byte(body)))
 			}
 			_, _ = f.Write([]byte(body + "\n"))
 		}
