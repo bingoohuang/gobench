@@ -112,7 +112,7 @@ Options:
   -v               Print version
   -weed            Weed master URL, like http://127.0.0.1:9333
   -pprof           Profile pprof address, like localhost:6060
-  -body[:cond]     A filename to save response body, with an optinal jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
+  -body[:cond]     A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
 `
 
 func usageAndExit(msg string) {
