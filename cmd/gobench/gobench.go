@@ -189,10 +189,10 @@ func (a *App) Init() {
 	a.setupResponsePrinter()
 	a.setupBodyPrint()
 
-	singalCh := make(chan os.Signal)
-	signal.Notify(singalCh, os.Interrupt, syscall.SIGTERM)
+	signalCh := make(chan os.Signal)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-singalCh
+		<-signalCh
 		close(a.exitChan)
 	}()
 }
@@ -540,9 +540,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 
 	go func() {
 		errStopped := fmt.Errorf("program stopped")
-		defer func() {
-			close(c.postFileChannel)
-		}()
+		defer func() { close(c.postFileChannel) }()
 
 		for i := 0; i < a.requestsTotal; {
 			select {
