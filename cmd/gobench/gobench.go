@@ -52,7 +52,7 @@ type App struct {
 	method, duration, urls, postData, uFilePath                     string
 	keepAlive, exitRequested                                        bool
 	uploadRandImg, printResult                                      string
-	wTimeout, rTimeout, thinkMin, thinkMax                          time.Duration
+	timeout, thinkMin, thinkMax                                     time.Duration
 	rThroughput, wThroughput                                        uint64
 	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
 	weedMasterURL, pprof                                            string
@@ -105,8 +105,7 @@ Options:
   -i.size          Upload fixed img size (eg. 44kB, 17MB)
   -u.file          Upload file path
   -u.field         Upload field name (default "file")
-  -r.timeout       Read timeout (like 5ms,10ms,10s) (default 5s)
-  -w.timeout       Write timeout (like 5ms,10ms,10s) (default 5s)
+  -timeout       Read/Write timeout (like 5ms,10ms,10s) (default 5s)
   -cpus            Number of used cpu cores. (default for current machine is %d cores)
   -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
   -v               Print version
@@ -145,8 +144,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.uploadRandImg, "image", "", "")
 	flag.StringVar(&a.fixedImgSize, "i.size", "", "")
 	flag.StringVar(&a.method, "m", "", "")
-	flag.DurationVar(&a.wTimeout, "w.timeout", 5*time.Second, "")
-	flag.DurationVar(&a.rTimeout, "r.timeout", 5*time.Second, "")
+	flag.DurationVar(&a.timeout, "timeout", 5*time.Second, "")
 	flag.StringVar(&a.authHeader, "auth", "", "")
 	flag.StringVar(&a.contentType, "c.type", "", "")
 	flag.StringVar(&a.proxy, "x", "", "")
@@ -479,8 +477,8 @@ func (a *App) NewConfiguration() (c *Conf) {
 	a.dealPostDataFilePath(c)
 	a.dealUploadFilePath(c)
 
-	c.myClient.ReadTimeout = a.rTimeout
-	c.myClient.WriteTimeout = a.wTimeout
+	c.myClient.ReadTimeout = a.timeout
+	c.myClient.WriteTimeout = a.timeout
 	c.myClient.MaxConnsPerHost = a.connections
 	c.myClient.Dial = a.MyDialer()
 
