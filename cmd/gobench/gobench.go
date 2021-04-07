@@ -55,7 +55,7 @@ type App struct {
 	timeout, thinkMin, thinkMax                                     time.Duration
 	rThroughput, wThroughput                                        uint64
 	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
-	weedMasterURL, pprof                                            string
+	weedMasterURL, pprof, profile                                   string
 
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
@@ -83,6 +83,7 @@ type Conf struct {
 
 	myClient        fasthttp.Client
 	postFileChannel chan string
+	profiles        []Profile
 }
 
 const usage = `Usage: gobench [options...] url1[,url2...]
@@ -95,6 +96,7 @@ Options:
   -r               Number of requests per goroutine
   -d               Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
   -p               Print something. 0: Print http response; 1: with extra newline; x.log: log file
+  -profile         Profile file name, pass an non-existing profile to generate a sample one
   -x               Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
   -P               POST data, use @a.json for a file
   -c.type          Content-Type, eg, json, plain, or other full name
@@ -138,6 +140,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.urls, "l", "", "")
 	flag.BoolVar(&a.keepAlive, "k", true, "")
 	flag.StringVar(&a.printResult, "p", "", "")
+	flag.StringVar(&a.profile, "profile", "", "")
 	flag.StringVar(&a.postData, "P", "", "")
 	flag.StringVar(&a.uFilePath, "u.file", "", "")
 	flag.StringVar(&a.uFieldName, "u.field", "file", "")
@@ -472,6 +475,7 @@ func (a *App) NewConfiguration() (c *Conf) {
 		c.method = strings.ToUpper(a.method)
 	}
 
+	a.processProfile(c)
 	a.period(c)
 	a.processUrls(c)
 	a.dealPostDataFilePath(c)
@@ -490,8 +494,8 @@ func (a *App) NewConfiguration() (c *Conf) {
 }
 
 func (a *App) processUrls(c *Conf) {
-	if a.urls == "" && a.weedMasterURL == "" {
-		usageAndExit("url/weed required!")
+	if a.urls == "" && a.weedMasterURL == "" && len(c.profiles) == 0 {
+		usageAndExit("url/weed/profile required!")
 	}
 
 	if strings.Index(a.urls, "@") == 0 {
@@ -782,17 +786,29 @@ func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fi
 		req := fasthttp.AcquireRequest()
 		defer fasthttp.ReleaseRequest(req)
 
-		req.SetRequestURI(addr)
-		req.Header.SetMethod(method)
-		SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
-		SetHeader(req, "Authorization", cnf.authHeader)
-		SetHeader(req, "Content-Type", contentType)
-		req.SetBody(postData)
+		if len(cnf.profiles) > 0 {
+			pr := cnf.profiles[0]
+			req.SetRequestURI(pr.URL)
+			req.Header.SetMethod(pr.Method)
+			for k, v := range pr.Headers {
+				SetHeader(req, k, v)
+			}
+
+			req.SetBody([]byte(pr.Body))
+		} else {
+			req.SetRequestURI(addr)
+			req.Header.SetMethod(method)
+			SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
+			SetHeader(req, "Authorization", cnf.authHeader)
+			SetHeader(req, "Content-Type", contentType)
+			req.SetBody(postData)
+		}
 
 		rsp = fasthttp.AcquireResponse()
 		defer fasthttp.ReleaseResponse(rsp)
 
 		err = cnf.myClient.Do(req, rsp)
+
 		statusCode = rsp.StatusCode()
 	}
 	var (
@@ -1330,3 +1346,139 @@ func FastGet(c *fasthttp.Client, requestUri string, out interface{}) error {
 
 	return nil
 }
+
+func (a *App) processProfile(c *Conf) {
+	if a.profile == "" {
+		return
+	}
+
+	_, err := os.Stat(a.profile)
+	if os.IsNotExist(err) {
+		if err := os.WriteFile(a.profile, []byte(sampleProfile), os.ModePerm); err != nil {
+			panic(err.Error())
+		}
+
+		fmt.Printf("sample profile %s generated!\n", a.profile)
+		os.Exit(0)
+	}
+
+	if err != nil {
+		panic(err.Error())
+	}
+
+	f, err := os.Open(a.profile)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer f.Close()
+
+	profiles, err := ReadHTTPFromFile(f)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	c.profiles = profiles
+}
+
+type Profile struct {
+	Method  string
+	URL     string
+	Headers map[string]string
+	Body    string
+}
+
+func ReadHTTPFromFile(r io.Reader) ([]Profile, error) {
+	buf := bufio.NewReader(r)
+	stream := make([]Profile, 0)
+
+	for {
+		profile, err := ParseRequest(buf)
+		if err == io.EOF {
+			if profile != nil {
+				stream = append(stream, *profile)
+			}
+			break
+		}
+		if err != nil {
+			return stream, err
+		}
+
+		stream = append(stream, *profile)
+	}
+
+	return stream, nil
+}
+
+func ParseRequest(buf *bufio.Reader) (*Profile, error) {
+	var p *Profile
+	for {
+		l, err := buf.ReadString('\n')
+		if err != nil {
+			return p, err
+		}
+
+		l = strings.TrimSpace(l)
+		if method, ok := HasAnyPrefix(l, http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+			http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace); ok {
+			p = &Profile{
+				Method:  method,
+				URL:     strings.TrimSpace(l[len(method):]),
+				Headers: make(map[string]string),
+			}
+		}
+
+		if p == nil {
+			continue
+		}
+
+		for {
+			l, err = buf.ReadString('\n')
+			if err != nil {
+				return nil, err
+			}
+			if l == "\n" {
+				break
+			}
+
+			pos := strings.Index(l, ":")
+			if pos > 0 {
+				k := strings.TrimSpace(l[:pos])
+				v := strings.TrimSpace(l[pos+1:])
+				p.Headers[k] = v
+			}
+		}
+
+		for {
+			l, err = buf.ReadString('\n')
+			if err != nil {
+				return p, err
+			}
+			if l == "\n" {
+				break
+			}
+
+			p.Body += l
+		}
+	}
+}
+
+func HasAnyPrefix(l string, subs ...string) (string, bool) {
+	for _, sub := range subs {
+		if strings.HasPrefix(l, sub+" ") {
+			return sub, true
+		}
+	}
+
+	return "", false
+}
+
+const sampleProfile = `
+###
+GET http://127.0.0.1:1080
+
+###
+POST http://127.0.0.1:1080
+Bingoo-Name: bingoohuang
+
+{"name": "bingoohuang", "age": 1000}
+`
