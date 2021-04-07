@@ -404,7 +404,7 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 	} else {
 		fmt.Fprintf(w, "Bad requests(!2xx/%s):\t%d hits\n", a.cond, rr.badFailed)
 	}
-	fmt.Fprintf(w, "Successful requests rate:\t%d hits/sec\n", uint64(float64(rr.success)/elapsedSeconds))
+	fmt.Fprintf(w, "Successful requests rate:\t%0.3f hits/sec\n", float64(rr.success)/elapsedSeconds)
 	fmt.Fprintf(w, "Read throughput:\t%s/sec\n",
 		humanize.IBytes(uint64(float64(a.rThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Write throughput:\t%s/sec\n",
