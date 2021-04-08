@@ -83,7 +83,7 @@ type Conf struct {
 
 	myClient        fasthttp.Client
 	postFileChannel chan string
-	profiles        []Profile
+	profiles        []*Profile
 }
 
 const usage = `Usage: gobench [options...] url1[,url2...]
@@ -511,15 +511,7 @@ func (a *App) processUrls(c *Conf) {
 	}
 
 	for i, u := range c.urls {
-		if strings.HasPrefix(u, ":") {
-			if u == ":" {
-				c.urls[i] = "http://localhost/"
-			} else if len(u) > 1 && u[1] != '/' { // like :8080
-				c.urls[i] = "http://localhost" + u
-			} else { // like ://127.0.0.1:8080/abc
-				c.urls[i] = "http://localhost" + u[1:]
-			}
-		}
+		c.urls[i] = fixUrl(u)
 	}
 }
 
@@ -1387,34 +1379,27 @@ type Profile struct {
 	Body    string
 }
 
-func ReadHTTPFromFile(r io.Reader) ([]Profile, error) {
+func ReadHTTPFromFile(r io.Reader) ([]*Profile, error) {
 	buf := bufio.NewReader(r)
-	stream := make([]Profile, 0)
 
-	for {
-		profile, err := ParseRequest(buf)
-		if err == io.EOF {
-			if profile != nil {
-				stream = append(stream, *profile)
-			}
-			break
-		}
-		if err != nil {
-			return stream, err
-		}
-
-		stream = append(stream, *profile)
+	profiles, err := ParseRequests(buf)
+	if err == io.EOF {
+		return profiles, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	return stream, nil
+	return profiles, nil
 }
 
-func ParseRequest(buf *bufio.Reader) (*Profile, error) {
+func ParseRequests(buf *bufio.Reader) ([]*Profile, error) {
+	var profiles []*Profile
 	var p *Profile
 	for {
 		l, err := buf.ReadString('\n')
 		if err != nil {
-			return p, err
+			return profiles, err
 		}
 
 		l = strings.TrimSpace(l)
@@ -1422,9 +1407,10 @@ func ParseRequest(buf *bufio.Reader) (*Profile, error) {
 			http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace); ok {
 			p = &Profile{
 				Method:  method,
-				URL:     strings.TrimSpace(l[len(method):]),
+				URL:     fixUrl(strings.TrimSpace(l[len(method):])),
 				Headers: make(map[string]string),
 			}
+			profiles = append(profiles, p)
 		}
 
 		if p == nil {
@@ -1451,7 +1437,7 @@ func ParseRequest(buf *bufio.Reader) (*Profile, error) {
 		for {
 			l, err = buf.ReadString('\n')
 			if err != nil {
-				return p, err
+				return profiles, err
 			}
 			if l == "\n" {
 				break
@@ -1459,6 +1445,8 @@ func ParseRequest(buf *bufio.Reader) (*Profile, error) {
 
 			p.Body += l
 		}
+
+		p = nil
 	}
 }
 
@@ -1478,7 +1466,43 @@ GET http://127.0.0.1:1080
 
 ###
 POST http://127.0.0.1:1080
+Content-Type: application/json;charset=utf-8
 Bingoo-Name: bingoohuang
 
 {"name": "bingoohuang", "age": 1000}
 `
+
+var (
+	reScheme = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+-.]*://`)
+)
+
+func fixUrl(s string) string {
+	defaultScheme := "http"
+	defaultHost := "localhost"
+
+	if s == ":" {
+		s = ":80"
+	}
+
+	// ex) :8080/hello or /hello or :
+	if strings.HasPrefix(s, ":") || strings.HasPrefix(s, "/") {
+		s = defaultHost + s
+	}
+
+	// ex) example.com/hello
+	if !reScheme.MatchString(s) {
+		s = defaultScheme + "://" + s
+	}
+
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	u.Host = strings.TrimSuffix(u.Host, ":")
+	if u.Path == "" {
+		u.Path = "/"
+	}
+
+	return u.String()
+}
