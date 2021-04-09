@@ -88,32 +88,32 @@ type Conf struct {
 
 const usage = `Usage: gobench [options...] url1[,url2...]
 Options:
-  -l               URL list (# separated), or @URL's file path (line separated)
-  -m               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
-  -c               Number of connections (default 100)
-  -n               Number of total requests
-  -t               Number of concurrent goroutines (default 100)
-  -r               Number of requests per goroutine
-  -d               Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
-  -p               Print something. 0: Print http response; 1: with extra newline; x.log: log file
-  -profile         Profile file name, pass an non-existing profile to generate a sample one
-  -x               Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
-  -P               POST data, use @a.json for a file
-  -c.type          Content-Type, eg, json, plain, or other full name
-  -auth            Authorization header
-  -k               HTTP keep-alive (default true)
-  -ok              Condition like 'status == 200' for json output
-  -image           Upload random images by file upload, png/jpg
-  -i.size          Upload fixed img size (eg. 44kB, 17MB)
-  -u.file          Upload file path
-  -u.field         Upload field name (default "file")
-  -timeout       Read/Write timeout (like 5ms,10ms,10s) (default 5s)
-  -cpus            Number of used cpu cores. (default for current machine is %d cores)
-  -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
-  -v               Print version
-  -weed            Weed master URL, like http://127.0.0.1:9333
-  -pprof           Profile pprof address, like localhost:6060
-  -body[:cond]     A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
+  -l           URL list (# separated), or @URL's file path (line separated)
+  -m           HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
+  -c           Number of connections (default 100)
+  -n           Number of total requests
+  -t           Number of concurrent goroutines (default 100)
+  -r           Number of requests per goroutine
+  -d           Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
+  -p           Print something. 0: Print http response; 1: with extra newline; x.log: log file
+  -profile     Profile file name, pass an non-existing profile to generate a sample one
+  -x           Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
+  -P           POST data, use @a.json for a file
+  -c.type      Content-Type, eg, json, plain, or other full name
+  -auth        Authorization header
+  -k           HTTP keep-alive (default true)
+  -ok          Condition like 'status == 200' for json output
+  -image       Upload random images by file upload, png/jpg
+  -i.size      Upload fixed img size (eg. 44kB, 17MB)
+  -u.file      Upload file path
+  -u.field     Upload field name (default "file")
+  -timeout     Read/Write timeout (like 5ms,10ms,10s) (default 5s)
+  -cpus        Number of used cpu cores. (default for current machine is %d cores)
+  -think       Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
+  -v           Print version
+  -weed        Weed master URL, like http://127.0.0.1:9333
+  -pprof       Profile pprof address, like :6060
+  -body[:cond] A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
 `
 
 func usageAndExit(msg string) {
