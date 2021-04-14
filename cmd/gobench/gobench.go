@@ -103,7 +103,7 @@ Options:
   -auth        Authorization header
   -k           HTTP keep-alive (default true)
   -ok          Condition like 'status == 200' for json output
-  -image       Upload random images by file upload, png/jpg
+  -image       Upload random images, png/jpg
   -i.size      Upload fixed img size (eg. 44kB, 17MB)
   -u.file      Upload file path
   -u.field     Upload field name (default "file")
@@ -175,7 +175,7 @@ func (a *App) Init() {
 
 	if flag.NArg() > 0 {
 		if a.urls != "" {
-			usageAndExit("")
+			usageAndExit("bad args for " + strings.Join(flag.Args(), ", "))
 		}
 		a.urls = strings.Join(flag.Args(), ",")
 	}
