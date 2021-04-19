@@ -21,14 +21,14 @@ $ gobench -h
 Usage: gobench [options...] url1[,url2...]
 Options:
   -l               URL list (comma separated), or @URL's file path (line separated)
-  -m               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
+  -X               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
   -c               Number of connections (default 100)
   -n               Number of total requests
   -t               Number of concurrent goroutines (default 100)
   -r               Number of requests per goroutine
   -d               Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
   -p               Print something. 0: Print http response; 1: with extra newline; x.log: log file
-  -x               Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
+  -proxy           Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
   -P               POST data, use @a.json for a file
   -c.type          Content-Type, eg, json, plain, or other full name
   -auth            Authorization header
