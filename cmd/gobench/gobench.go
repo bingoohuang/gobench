@@ -55,7 +55,7 @@ type App struct {
 	timeout, thinkMin, thinkMax                                     time.Duration
 	rThroughput, wThroughput                                        uint64
 	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
-	weedMasterURL, pprof, profile                                   string
+	weedMasterURL, pprof, profile, eval                             string
 
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
@@ -70,6 +70,7 @@ type App struct {
 	body        string
 	bodyPrintCh chan string
 	waitGroup   *sync.WaitGroup
+	seqFn       func(s string) string
 }
 
 // Conf for gobench.
@@ -114,6 +115,7 @@ Options:
   -weed        Weed master URL, like http://127.0.0.1:9333
   -pprof       Profile pprof address, like :6060
   -body[:cond] A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
+  -eval dd:seq Eval dd in url(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
 `
 
 func usageAndExit(msg string) {
@@ -155,6 +157,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.weedMasterURL, "weed", "", "")
 	flag.StringVar(&a.pprof, "pprof", "", "")
 	flag.StringVar(&a.body, "body", "", "")
+	flag.StringVar(&a.eval, "eval", "", "")
 	cond := flag.String("ok", "", "")
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
@@ -191,6 +194,7 @@ func (a *App) Init() {
 	a.waitGroup = &sync.WaitGroup{}
 	a.setupResponsePrinter()
 	a.setupBodyPrint()
+	a.parseEval(a.eval)
 
 	signalCh := make(chan os.Signal)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
@@ -198,6 +202,56 @@ func (a *App) Init() {
 		<-signalCh
 		close(a.exitChan)
 	}()
+}
+
+func (a *App) parseEval(eval string) {
+	if eval == "" {
+		return
+	}
+
+	pos := strings.LastIndex(eval, ":")
+	if pos <= 0 || pos == len(eval)-1 {
+		fmt.Fprintf(os.Stderr, "bad format for eval %s", eval)
+		os.Exit(1)
+	}
+
+	pattern := eval[:pos]
+	evaluator := eval[pos+1:]
+	switch evaluator {
+	case "seq":
+		loc := regexp.MustCompile(`\d+`).FindStringIndex(pattern)
+		f := func(s string, i int64) string {
+			seqStr := fmt.Sprintf("%d", i)
+			return strings.ReplaceAll(s, pattern, pattern+seqStr)
+		}
+		start, max := int64(0), int64(0)
+		if len(loc) > 0 {
+			start, _ = strconv.ParseInt(pattern[loc[0]:loc[1]], 10, 64)
+			width := loc[1] - loc[0]
+			max = 1
+			for i := 0; i < width; i++ {
+				max *= 10
+			}
+			left, right := pattern[:loc[0]], pattern[loc[1]:]
+			f = func(s string, i int64) string {
+				seqStr := fmt.Sprintf("%0*d", width, i)
+				return strings.ReplaceAll(s, pattern, left+seqStr+right)
+			}
+		}
+		seqCh := make(chan int64, 100)
+		go func() {
+			for i := start; ; i++ {
+				if i == max {
+					i = start
+				}
+				seqCh <- i
+			}
+		}()
+		a.seqFn = func(s string) string { return f(s, <-seqCh) }
+	default:
+		fmt.Fprintf(os.Stderr, "unknown evaluator for eval %s", eval)
+		os.Exit(1)
+	}
 }
 
 func (a *App) parseCond(cond string) {
@@ -788,6 +842,11 @@ func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fi
 
 			req.SetBody([]byte(pr.Body))
 		} else {
+			if a.seqFn != nil {
+				seqAddr := a.seqFn(addr)
+				a.responsePrinter("url: " + seqAddr)
+				addr = seqAddr
+			}
 			req.SetRequestURI(addr)
 			req.Header.SetMethod(method)
 			SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
@@ -951,6 +1010,7 @@ func (a *App) setupResponsePrinter() {
 
 	switch r := a.printResult; r {
 	case "":
+		a.responsePrinter = func(a string) {}
 		return
 	case "0":
 		f = func(a string, direct bool) {
