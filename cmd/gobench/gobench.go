@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -569,11 +570,23 @@ func (a *App) processUrls(c *Conf) {
 	}
 }
 
+func expand(path string) string {
+	if len(path) == 0 || path[0] != '~' {
+		return path
+	}
+
+	usr, err := user.Current()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(usr.HomeDir, path[1:])
+}
+
 func (a *App) dealUploadFilePath(c *Conf) {
 	if a.uFilePath == "" {
 		return
 	}
-
+	a.uFilePath = expand(a.uFilePath)
 	fs, err := os.Stat(a.uFilePath)
 	if err != nil && os.IsNotExist(err) {
 		log.Fatalf("%s dos not exist", a.uFilePath)
