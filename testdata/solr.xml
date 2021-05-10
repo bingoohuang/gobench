@@ -1,0 +1,27 @@
+<add commitWithin="100" overwrite="true">
+    <doc boost="1.0">
+        <field name="idCode">1101011990030723x00</field>
+        <field name="licenseCode">11000020210000045Nx00</field>
+        <field name="implementCode">10003590100002888X110000x00</field>
+        <field name="name">测试证照05（水印样式）</field>
+        <field name="licenseStatus">REGISTER</field>
+        <field name="holderName">幸玉山x00</field>
+        <field name="holderIdentityType">10</field>
+        <field name="holderIdentityNum">110101199003072392</field>
+        <field name="dataType">MANUAL</field>
+        <field name="bizType">LICENSE_ISSUE</field>
+        <field name="bizStatus">APPLY</field>
+        <field name="implementOrgCode">00002888X</field>
+        <field name="issueOrgName">北京市公安局</field>
+        <field name="issueOrgCode">00002888X</field>
+        <field name="divisionCode">110000</field>
+        <field name="issueDate">2021-05-09T16:00:00.000Z</field>
+        <field name="areaCode">110000</field>
+        <field name="trustLevel">A</field>
+        <field name="id">78de3904-1f47-40d7-a5ca-a393ffca3b90</field>
+        <field name="createdBy">4f070706-c30c-481c-a837-9f39136c62de</field>
+        <field name="createdDate">2021-05-10T08:14:14.000Z</field>
+        <field name="lastModifiedBy">4f070706-c30c-481c-a837-9f39136c62de</field>
+        <field name="lastModifiedDate">2021-05-10T08:14:35.000Z</field>
+    </doc>
+</add>

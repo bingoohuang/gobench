@@ -71,7 +71,7 @@ type App struct {
 	body        string
 	bodyPrintCh chan string
 	waitGroup   *sync.WaitGroup
-	seqFn       func(s string) string
+	seqFn       func(s ...string) []string
 }
 
 // Conf for gobench.
@@ -116,7 +116,8 @@ Options:
   -weed        Weed master URL, like http://127.0.0.1:9333
   -pprof       Profile pprof address, like :6060
   -body[:cond] A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
-  -eval dd:seq Eval dd in url(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
+  -eval dd:seq Eval dd in url/body(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
+  -eval dd:seq0 Eval dd in url/body(eg. dd:seq0 will evaluated to 0-n, d00:seq will evaluated to 00-99) 
 `
 
 func usageAndExit(msg string) {
@@ -219,11 +220,19 @@ func (a *App) parseEval(eval string) {
 	pattern := eval[:pos]
 	evaluator := eval[pos+1:]
 	switch evaluator {
-	case "seq":
+	case "seq0", "seq":
+		prepend := pattern
+		if evaluator == "seq0" {
+			prepend = ""
+		}
 		loc := regexp.MustCompile(`\d+`).FindStringIndex(pattern)
-		f := func(s string, i int64) string {
+		f := func(ss []string, i int64) []string {
 			seqStr := fmt.Sprintf("%d", i)
-			return strings.ReplaceAll(s, pattern, pattern+seqStr)
+			ret := make([]string, len(ss))
+			for i, s := range ss {
+				ret[i] = strings.ReplaceAll(s, pattern, prepend+seqStr)
+			}
+			return ret
 		}
 		start, max := int64(0), int64(0)
 		if len(loc) > 0 {
@@ -234,9 +243,16 @@ func (a *App) parseEval(eval string) {
 				max *= 10
 			}
 			left, right := pattern[:loc[0]], pattern[loc[1]:]
-			f = func(s string, i int64) string {
+			if evaluator == "seq0" {
+				left = ""
+			}
+			f = func(ss []string, i int64) []string {
 				seqStr := fmt.Sprintf("%0*d", width, i)
-				return strings.ReplaceAll(s, pattern, left+seqStr+right)
+				ret := make([]string, len(ss))
+				for i, s := range ss {
+					ret[i] = strings.ReplaceAll(s, pattern, left+seqStr+right)
+				}
+				return ret
 			}
 		}
 		seqCh := make(chan int64, 100)
@@ -248,7 +264,7 @@ func (a *App) parseEval(eval string) {
 				seqCh <- i
 			}
 		}()
-		a.seqFn = func(s string) string { return f(s, <-seqCh) }
+		a.seqFn = func(s ...string) []string { return f(s, <-seqCh) }
 	default:
 		fmt.Fprintf(os.Stderr, "unknown evaluator for eval %s", eval)
 		os.Exit(1)
@@ -680,6 +696,8 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 		firstByte := c.postData[0]
 		if firstByte == '{' || firstByte == '[' {
 			c.contentType = "application/json; charset=utf-8"
+		} else if bytes.HasSuffix(bytes.TrimSpace(c.postData), []byte(">")) {
+			c.contentType = "application/xml; charset=utf-8"
 		}
 	}
 }
@@ -855,17 +873,19 @@ func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fi
 
 			req.SetBody([]byte(pr.Body))
 		} else {
+			postDataStr := string(postData)
 			if a.seqFn != nil {
-				seqAddr := a.seqFn(addr)
-				a.responsePrinter("url: " + seqAddr)
-				addr = seqAddr
+				ret := a.seqFn(addr, postDataStr)
+				addr = ret[0]
+				postDataStr = ret[1]
+				a.responsePrinter("url: " + addr)
 			}
 			req.SetRequestURI(addr)
 			req.Header.SetMethod(method)
 			SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
 			SetHeader(req, "Authorization", cnf.authHeader)
 			SetHeader(req, "Content-Type", contentType)
-			req.SetBody(postData)
+			req.SetBody([]byte(postDataStr))
 		}
 
 		rsp = fasthttp.AcquireResponse()
