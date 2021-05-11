@@ -44,6 +44,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	"github.com/docker/go-units"
+	"github.com/satori/go.uuid"
 	_ "net/http/pprof"
 )
 
@@ -229,8 +230,11 @@ func (a *App) parseEval(eval string) {
 		f := func(ss []string, i int64) []string {
 			seqStr := fmt.Sprintf("%d", i)
 			ret := make([]string, len(ss))
+			un := uuid.NewV4().String()
+
 			for i, s := range ss {
-				ret[i] = strings.ReplaceAll(s, pattern, prepend+seqStr)
+				s = strings.ReplaceAll(s, pattern, prepend+seqStr)
+				ret[i] = strings.ReplaceAll(s, "{uuid}", un)
 			}
 			return ret
 		}
@@ -249,8 +253,10 @@ func (a *App) parseEval(eval string) {
 			f = func(ss []string, i int64) []string {
 				seqStr := fmt.Sprintf("%0*d", width, i)
 				ret := make([]string, len(ss))
+				un := uuid.NewV4().String()
 				for i, s := range ss {
-					ret[i] = strings.ReplaceAll(s, pattern, left+seqStr+right)
+					s = strings.ReplaceAll(s, pattern, left+seqStr+right)
+					ret[i] = strings.ReplaceAll(s, "{uuid}", un)
 				}
 				return ret
 			}
@@ -598,6 +604,15 @@ func expand(path string) string {
 	return filepath.Join(usr.HomeDir, path[1:])
 }
 
+func IfExit(ch chan bool) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
 func (a *App) dealUploadFilePath(c *Conf) {
 	if a.uFilePath == "" {
 		return
@@ -622,10 +637,8 @@ func (a *App) dealUploadFilePath(c *Conf) {
 		defer func() { close(c.postFileChannel) }()
 
 		for i := 0; i < a.requestsTotal; {
-			select {
-			case <-a.exitChan:
+			if IfExit(a.exitChan) {
 				return
-			default:
 			}
 
 			if isSingleFile {
@@ -645,10 +658,8 @@ func (a *App) dealUploadFilePath(c *Conf) {
 						return nil
 					}
 
-					select {
-					case <-a.exitChan:
+					if IfExit(a.exitChan) {
 						return errStopped
-					default:
 					}
 
 					if randInt(10) != 0 {

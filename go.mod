@@ -15,6 +15,7 @@ require (
 	github.com/karrick/godirwalk v1.16.1
 	github.com/nacos-group/nacos-sdk-go v1.0.2
 	github.com/pkg/errors v0.9.1
+	github.com/satori/go.uuid v1.2.0
 	github.com/tidwall/gjson v1.6.3
 	github.com/valyala/fasthttp v1.21.0
 	golang.org/x/net v0.0.0-20201016165138-7b1cca2348c0
