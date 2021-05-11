@@ -982,12 +982,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 		r += "file:" + fileName + " "
 	}
 
-	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] "
-
-	if body != "" {
-		r += body
-	}
-
+	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] " + resp.String()
 	a.responsePrinter(r)
 }
 
