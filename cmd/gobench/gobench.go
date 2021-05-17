@@ -917,12 +917,18 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 	for k, v := range pr.Headers {
 		SetHeader(req, k, v)
 	}
+	SetGobenchHeaders(req)
 
 	req.SetBody([]byte(pr.Body))
 
 	err = cnf.myClient.Do(req, rsp)
 	statusCode = rsp.StatusCode()
 	a.checkResult(rc, err, statusCode, rsp, addr, fileName)
+}
+
+func SetGobenchHeaders(req *fasthttp.Request) {
+	SetHeader(req, "X-Gobench-Uuid", uuid.NewV4().String())
+	SetHeader(req, "X-Gobench-Time", time.Now().Format(`2006-01-02 15:04:05.000`))
 }
 
 func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string, contentType string, fileName string, postData []byte, rsp *fasthttp.Response, err error, statusCode int) {
@@ -942,6 +948,8 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 	SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
 	SetHeader(req, "Authorization", cnf.authHeader)
 	SetHeader(req, "Content-Type", contentType)
+	SetGobenchHeaders(req)
+
 	req.SetBody([]byte(postDataStr))
 
 	err = cnf.myClient.Do(req, rsp)
