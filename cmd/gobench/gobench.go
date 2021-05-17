@@ -415,11 +415,7 @@ func main() {
 
 	if app.printResult == "" {
 		if app.requestsTotal > 0 {
-			total := app.requestsTotal
-			if len(c.profiles) > 0 {
-				total *= len(c.profiles)
-			}
-			bar := pb.StartNew(total)
+			bar := pb.StartNew(app.requestsTotal)
 			barIncr = func() { bar.Increment() }
 			barFinish = func() { bar.Finish() }
 		} else {
@@ -753,6 +749,10 @@ func (a *App) period(c *Conf) {
 
 	if c.requests != 0 {
 		period = 0
+	}
+
+	if len(c.profiles) > 0 {
+		a.requestsTotal *= len(c.profiles)
 	}
 
 	if period == 0 {
@@ -1534,9 +1534,6 @@ func (a *App) processProfile(c *Conf) {
 	}
 
 	c.profiles = profiles
-	if len(profiles) > 0 {
-		a.requestsTotal *= len(profiles)
-	}
 }
 
 type Profile struct {
