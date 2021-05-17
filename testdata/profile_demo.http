@@ -1,0 +1,8 @@
+###
+POST http://127.0.0.1:5003/dynamic/demo
+Bingoo-Name: bingoohuang
+
+{
+    "name": "ding",
+    "age": 20
+}
