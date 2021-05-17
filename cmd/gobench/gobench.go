@@ -57,7 +57,7 @@ type App struct {
 	timeout, thinkMin, thinkMax                                     time.Duration
 	rThroughput, wThroughput                                        uint64
 	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
-	weedMasterURL, pprof, profile, eval                             string
+	weedMasterURL, pprof, profile, profileBaseURL, eval             string
 
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
@@ -91,34 +91,35 @@ type Conf struct {
 
 const usage = `Usage: gobench [options...] url1[,url2...]
 Options:
-  -l           URL list (# separated), or @URL's file path (line separated)
-  -X           HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
-  -c           Number of connections (default 100)
-  -n           Number of total requests
-  -t           Number of concurrent goroutines (default 100)
-  -r           Number of requests per goroutine
-  -d           Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
-  -p           Print something. 0: Print http response; 1: with extra newline; x.log: log file
-  -profile     Profile file name, pass an non-existing profile to generate a sample one
-  -proxy       Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
-  -P           POST data, use @a.json for a file
-  -c.type      Content-Type, eg, json, plain, or other full name
-  -auth        Authorization header
-  -k           HTTP keep-alive (default true)
-  -ok          Condition like 'status == 200' for json output
-  -image       Upload random images, png/jpg
-  -i.size      Upload fixed img size (eg. 44kB, 17MB)
-  -u.file      Upload file path
-  -u.field     Upload field name (default "file")
-  -timeout     Read/Write timeout (like 5ms,10ms,10s) (default 5s)
-  -cpus        Number of used cpu cores. (default for current machine is %d cores)
-  -think       Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
-  -v           Print version
-  -weed        Weed master URL, like http://127.0.0.1:9333
-  -pprof       Profile pprof address, like :6060
-  -body[:cond] A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
-  -eval dd:seq Eval dd in url/body(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
-  -eval dd:seq0 Eval dd in url/body(eg. dd:seq0 will evaluated to 0-n, d00:seq will evaluated to 00-99) 
+  -l               URL list (# separated), or @URL's file path (line separated)
+  -X               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
+  -c               Number of connections (default 100)
+  -n               Number of total requests
+  -t               Number of concurrent goroutines (default 100)
+  -r               Number of requests per goroutine
+  -d               Duration of time (eg 10s, 10m, 2h45m) (10s if no total requests or per-goroutine-requests set)
+  -p               Print something. 0: Print http response; 1: with extra newline; x.log: log file
+  -profile         Profile file name, pass an non-existing profile to generate a sample one
+  -profile.baseurl Base URL for requests uri in Profile, like http://127.0.0.1:1080
+  -proxy           Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
+  -P               POST data, use @a.json for a file
+  -c.type          Content-Type, eg, json, plain, or other full name
+  -auth            Authorization header
+  -k               HTTP keep-alive (default true)
+  -ok              Condition like 'status == 200' for json output
+  -image           Upload random images, png/jpg
+  -i.size          Upload fixed img size (eg. 44kB, 17MB)
+  -u.file          Upload file path
+  -u.field         Upload field name (default "file")
+  -timeout         Read/Write timeout (like 5ms,10ms,10s) (default 5s)
+  -cpus            Number of used cpu cores. (default for current machine is %d cores)
+  -think           Think time, eg. 1s, 100ms, 100-200ms and etc. (unit ns, us/µs, ms, s, m, h)
+  -v               Print version
+  -weed            Weed master URL, like http://127.0.0.1:9333
+  -pprof           Profile pprof address, like :6060
+  -body[:cond]     A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
+  -eval dd:seq     Eval dd in url/body(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
+  -eval dd:seq0    Eval dd in url/body(eg. dd:seq0 will evaluated to 0-n, d00:seq will evaluated to 00-99) 
 `
 
 func usageAndExit(msg string) {
@@ -146,6 +147,7 @@ func (a *App) Init() {
 	flag.BoolVar(&a.keepAlive, "k", true, "")
 	flag.StringVar(&a.printResult, "p", "", "")
 	flag.StringVar(&a.profile, "profile", "", "")
+	flag.StringVar(&a.profileBaseURL, "profile.baseurl", "", "")
 	flag.StringVar(&a.postData, "P", "", "")
 	flag.StringVar(&a.uFilePath, "u.file", "", "")
 	flag.StringVar(&a.uFieldName, "u.field", "file", "")
@@ -410,9 +412,14 @@ func main() {
 	requestsChan := make(chan int, app.goroutines)
 	barIncr := func() {}
 	barFinish := func() {}
+
 	if app.printResult == "" {
 		if app.requestsTotal > 0 {
-			bar := pb.StartNew(app.requestsTotal)
+			total := app.requestsTotal
+			if len(c.profiles) > 0 {
+				total *= len(c.profiles)
+			}
+			bar := pb.StartNew(total)
 			barIncr = func() { bar.Increment() }
 			barFinish = func() { bar.Finish() }
 		} else {
@@ -588,7 +595,7 @@ func (a *App) processUrls(c *Conf) {
 	}
 
 	for i, u := range c.urls {
-		c.urls[i] = fixUrl(u)
+		c.urls[i] = fixUrl("", u)
 	}
 }
 
@@ -803,26 +810,25 @@ func (a *App) client(barIncr func(), requestsChan chan int, resultChan chan requ
 	}
 
 	i := 0
+	count := 0
 	for ; !a.exitRequested && (req == 0 || i < req); i++ {
 		addr := ""
 		if urlIndex >= 0 {
 			addr = conf.urls[urlIndex]
 		}
-		a.doRequest(resultChan, conf, addr)
+		count += a.doRequest(barIncr, resultChan, conf, addr)
 
 		if urlIndex >= 0 {
 			if urlIndex++; urlIndex >= len(conf.urls) {
 				urlIndex = 0
 			}
 		}
-
-		barIncr()
 	}
 
-	requestsChan <- i
+	requestsChan <- count
 }
 
-func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
+func (a *App) doRequest(barIncr func(), resultChan chan requestResult, c *Conf, addr string) int {
 	postData := c.postData
 	contentType := c.contentType
 	fileName := ""
@@ -836,10 +842,10 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 	a.tryMethod(c, http.MethodGet)
 
 	if c.postFileChannel == nil { // 非目录文件上传请求
-		a.do(resultChan, c, a.weed(addr), c.method, contentType, fileName, postData)
-		return
+		return a.do(barIncr, resultChan, c, a.weed(addr), c.method, contentType, fileName, postData)
 	}
 
+	count := 0
 	for pf := range c.postFileChannel {
 		data, ct, err := ReadUploadMultipartFile(a.uFieldName, pf)
 		if err != nil {
@@ -847,15 +853,17 @@ func (a *App) doRequest(resultChan chan requestResult, c *Conf, addr string) {
 			continue
 		}
 
-		a.do(resultChan, c, a.weed(addr), c.method, ct, pf, data)
+		count += a.do(barIncr, resultChan, c, a.weed(addr), c.method, ct, pf, data)
 	}
+
+	return count
 }
 
 type requestResult struct {
 	networkFailed, success, badFailed int
 }
 
-func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fileName string, postData []byte) {
+func (a *App) do(barIncr func(), rc chan requestResult, cnf *Conf, addr, method, contentType, fileName string, postData []byte) int {
 	var err error
 	var rsp *fasthttp.Response
 
@@ -869,43 +877,80 @@ func (a *App) do(rc chan requestResult, cnf *Conf, addr, method, contentType, fi
 	statusCode := 0
 
 	if strings.HasPrefix(addr, "err:") {
-		err = errors.New("addr-" + addr)
-	} else {
-		req := fasthttp.AcquireRequest()
-		defer fasthttp.ReleaseRequest(req)
-
-		if len(cnf.profiles) > 0 {
-			pr := cnf.profiles[0]
-			req.SetRequestURI(pr.URL)
-			req.Header.SetMethod(pr.Method)
-			for k, v := range pr.Headers {
-				SetHeader(req, k, v)
-			}
-
-			req.SetBody([]byte(pr.Body))
-		} else {
-			postDataStr := string(postData)
-			if a.seqFn != nil {
-				ret := a.seqFn(addr, postDataStr)
-				addr = ret[0]
-				postDataStr = ret[1]
-				a.responsePrinter("url: " + addr)
-			}
-			req.SetRequestURI(addr)
-			req.Header.SetMethod(method)
-			SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
-			SetHeader(req, "Authorization", cnf.authHeader)
-			SetHeader(req, "Content-Type", contentType)
-			req.SetBody([]byte(postDataStr))
-		}
-
-		rsp = fasthttp.AcquireResponse()
-		defer fasthttp.ReleaseResponse(rsp)
-
-		err = cnf.myClient.Do(req, rsp)
-
-		statusCode = rsp.StatusCode()
+		err := errors.New("addr-" + addr)
+		a.checkResult(rc, err, statusCode, rsp, addr, fileName)
+		barIncr()
+		return 1
 	}
+
+	if len(cnf.profiles) == 0 {
+		a.exec(rc, cnf, addr, method, contentType, fileName, postData, rsp, err, statusCode)
+		barIncr()
+		return 1
+	}
+
+	for _, pr := range cnf.profiles {
+		a.execProfile(rc, cnf, addr, rsp, pr, err, statusCode, fileName)
+		barIncr()
+	}
+
+	return len(cnf.profiles)
+}
+
+func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fasthttp.Response, pr *Profile, err error, statusCode int, fileName string) {
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	rsp = fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(rsp)
+
+	if a.profileBaseURL != "" && !strings.HasPrefix(pr.URL, "http") {
+		joined, err := CreateUri(a.profileBaseURL, pr.URL, nil)
+		if err != nil {
+			log.Fatalf("eror %v", err)
+		}
+		req.SetRequestURI(joined)
+	} else {
+		req.SetRequestURI(pr.URL)
+	}
+
+	req.Header.SetMethod(pr.Method)
+	for k, v := range pr.Headers {
+		SetHeader(req, k, v)
+	}
+
+	req.SetBody([]byte(pr.Body))
+
+	err = cnf.myClient.Do(req, rsp)
+	statusCode = rsp.StatusCode()
+	a.checkResult(rc, err, statusCode, rsp, addr, fileName)
+}
+
+func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string, contentType string, fileName string, postData []byte, rsp *fasthttp.Response, err error, statusCode int) {
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	rsp = fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(rsp)
+	postDataStr := string(postData)
+	if a.seqFn != nil {
+		ret := a.seqFn(addr, postDataStr)
+		addr = ret[0]
+		postDataStr = ret[1]
+		a.responsePrinter("url: " + addr)
+	}
+	req.SetRequestURI(addr)
+	req.Header.SetMethod(method)
+	SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
+	SetHeader(req, "Authorization", cnf.authHeader)
+	SetHeader(req, "Content-Type", contentType)
+	req.SetBody([]byte(postDataStr))
+
+	err = cnf.myClient.Do(req, rsp)
+	statusCode = rsp.StatusCode()
+
+	a.checkResult(rc, err, statusCode, rsp, addr, fileName)
+}
+
+func (a *App) checkResult(rc chan requestResult, err error, statusCode int, rsp *fasthttp.Response, addr string, fileName string) {
 	var (
 		rr         requestResult
 		resultDesc string
@@ -1375,7 +1420,7 @@ type HttpClient struct {
 	proxyUrl *url.URL
 }
 
-// Http implementation of ProxyConn
+// Dial implementation of ProxyConn
 func (hc *HttpClient) Dial(_ string, address string) (net.Conn, error) {
 	req, err := http.NewRequest("CONNECT", "http://"+address, nil)
 	if err != nil {
@@ -1402,7 +1447,11 @@ func (hc *HttpClient) Dial(_ string, address string) (net.Conn, error) {
 }
 
 func CreateUri(baseUri, relativeUri string, query map[string]string) (string, error) {
-	u, _ := url.Parse(relativeUri)
+	u, err := url.Parse(relativeUri)
+	if err != nil {
+		return "", err
+	}
+
 	q := u.Query()
 	for k, v := range query {
 		q.Set(k, v)
@@ -1463,7 +1512,7 @@ func (a *App) processProfile(c *Conf) {
 	}
 	defer f.Close()
 
-	profiles, err := ReadHTTPFromFile(f)
+	profiles, err := ReadHTTPFromFile(a.profileBaseURL, f)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -1478,23 +1527,25 @@ type Profile struct {
 	Body    string
 }
 
-func ReadHTTPFromFile(r io.Reader) ([]*Profile, error) {
+func ReadHTTPFromFile(baseUrl string, r io.Reader) ([]*Profile, error) {
 	buf := bufio.NewReader(r)
-
-	profiles, err := ParseRequests(buf)
-	if err == io.EOF {
-		return profiles, nil
-	}
+	profiles, err := ParseRequests(baseUrl, buf)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return profiles, nil
+		}
+
 		return nil, err
 	}
 
 	return profiles, nil
 }
 
-func ParseRequests(buf *bufio.Reader) ([]*Profile, error) {
+func ParseRequests(baseUrl string, buf *bufio.Reader) ([]*Profile, error) {
 	var profiles []*Profile
 	var p *Profile
+
+NEXT:
 	for {
 		l, err := buf.ReadString('\n')
 		if err != nil {
@@ -1502,11 +1553,14 @@ func ParseRequests(buf *bufio.Reader) ([]*Profile, error) {
 		}
 
 		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "#") {
+			continue
+		}
 		if method, ok := HasAnyPrefix(l, http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
 			http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace); ok {
 			p = &Profile{
 				Method:  method,
-				URL:     fixUrl(strings.TrimSpace(l[len(method):])),
+				URL:     fixUrl(baseUrl, strings.TrimSpace(l[len(method):])),
 				Headers: make(map[string]string),
 			}
 			profiles = append(profiles, p)
@@ -1519,9 +1573,14 @@ func ParseRequests(buf *bufio.Reader) ([]*Profile, error) {
 		for {
 			l, err = buf.ReadString('\n')
 			if err != nil {
-				return nil, err
+				return profiles, err
 			}
-			if l == "\n" {
+
+			l = strings.TrimSpace(l)
+			if strings.HasPrefix(l, "#") {
+				goto NEXT
+			}
+			if l == "" {
 				break
 			}
 
@@ -1538,7 +1597,12 @@ func ParseRequests(buf *bufio.Reader) ([]*Profile, error) {
 			if err != nil {
 				return profiles, err
 			}
-			if l == "\n" {
+
+			l = strings.TrimSpace(l)
+			if strings.HasPrefix(l, "#") {
+				goto NEXT
+			}
+			if l == "" {
 				break
 			}
 
@@ -1575,7 +1639,11 @@ var (
 	reScheme = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+-.]*://`)
 )
 
-func fixUrl(s string) string {
+func fixUrl(baseUrl, s string) string {
+	if baseUrl != "" {
+		return s
+	}
+
 	defaultScheme := "http"
 	defaultHost := "localhost"
 
