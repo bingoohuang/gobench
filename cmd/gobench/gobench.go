@@ -496,6 +496,7 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 		humanize.IBytes(uint64(float64(a.wThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Test time:\t%s(%s-%s)\n", elapsed.Round(time.Millisecond).String(),
 		startTime.Format("2006-01-02 15:04:05.000"), endTime.Format("15:04:05.000"))
+	fmt.Fprintf(w, "X-Gobench-Seq:\t%d\n", SecCur())
 	w.Flush()
 }
 
@@ -930,12 +931,11 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 
 var seq int32
 
-func IncGet() int32 {
-	return atomic.AddInt32(&seq, 1)
-}
+func SecCur() int32 { return atomic.LoadInt32(&seq) }
+func SeqInc() int32 { return atomic.AddInt32(&seq, 1) }
 
 func SetGobenchHeaders(req *fasthttp.Request) {
-	SetHeader(req, "X-Gobench-Seq", fmt.Sprintf("%d", IncGet()))
+	SetHeader(req, "X-Gobench-Seq", fmt.Sprintf("%d", SeqInc()))
 	SetHeader(req, "X-Gobench-Time", time.Now().Format(`2006-01-02 15:04:05.000`))
 }
 
