@@ -424,16 +424,18 @@ func main() {
 			barFinish = func() { bar.Finish() }
 		} else {
 			bar := pb.StartNew(int(c.duration.Seconds()))
-			barFinish = func() { bar.Finish() }
+			barFinish = func() {
+				for bar.Current() < bar.Total() {
+					bar.Increment()
+				}
+				bar.Finish()
+			}
 			go func() {
 				ticker := time.NewTicker(1 * time.Second)
 				defer ticker.Stop()
-				for {
-					select {
-					case <-ticker.C:
-						if bar.Increment(); bar.Current() >= bar.Total() {
-							return
-						}
+				for range ticker.C {
+					if bar.Increment(); bar.Current() >= bar.Total() {
+						return
 					}
 				}
 			}()
@@ -1532,6 +1534,9 @@ func (a *App) processProfile(c *Conf) {
 	}
 
 	c.profiles = profiles
+	if len(profiles) > 0 {
+		a.requestsTotal *= len(profiles)
+	}
 }
 
 type Profile struct {
