@@ -926,8 +926,14 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 	a.checkResult(rc, err, statusCode, rsp, addr, fileName)
 }
 
+var seq int32
+
+func IncGet() int32 {
+	return atomic.AddInt32(&seq, 1)
+}
+
 func SetGobenchHeaders(req *fasthttp.Request) {
-	SetHeader(req, "X-Gobench-Uuid", uuid.NewV4().String())
+	SetHeader(req, "X-Gobench-Seq", fmt.Sprintf("%d", IncGet()))
 	SetHeader(req, "X-Gobench-Time", time.Now().Format(`2006-01-02 15:04:05.000`))
 }
 
