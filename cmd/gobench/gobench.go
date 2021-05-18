@@ -209,10 +209,11 @@ func (a *App) Init() {
 	a.parseEval(a.eval)
 
 	signalCh := make(chan os.Signal)
-	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(signalCh, os.Interrupt, os.Kill, syscall.SIGTERM)
 	go func() {
 		<-signalCh
 		close(a.exitChan)
+		a.ctxCancel()
 	}()
 }
 
@@ -405,8 +406,6 @@ func main() {
 	}
 
 	startTime := time.Now()
-
-	HandleInterrupt(func() { app.ctx.Done() }, false)
 	c := app.NewConfiguration()
 	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines, startTime.Format("2006-01-02 15:04:05.000"))
 
@@ -469,19 +468,17 @@ func createBars(app *App, c *Conf) (barIncr, barFinish func()) {
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			if bar.Increment(); bar.Current() >= bar.Total() {
+		for {
+			select {
+			case <-ticker.C:
+				bar.Increment()
+			case <-app.ctx.Done():
 				return
 			}
 		}
 	}()
 
-	return func() {}, func() {
-		for bar.Current() < bar.Total() {
-			bar.Increment()
-		}
-		bar.Finish()
-	}
+	return func() {}, func() { bar.Finish() }
 }
 
 func (a *App) printResults(startTime time.Time, totalRequests int, rr requestResult) {
@@ -777,10 +774,7 @@ func (a *App) period(c *Conf) {
 
 	go func() {
 		<-time.After(period)
-		proc, _ := os.FindProcess(os.Getpid())
-		if err := proc.Signal(os.Interrupt); err != nil {
-			log.Println(err)
-		}
+		a.ctxCancel()
 	}()
 }
 
@@ -1280,21 +1274,6 @@ func (a *App) assignFids(c *fasthttp.Client) {
 			a.weedVolumeAssignedUrl <- p + fmt.Sprintf("_%d", j+1)
 		}
 	}
-}
-
-// HandleInterrupt handles Ctrl+C to exit after calling f.
-func HandleInterrupt(f func(), exitRightNow bool) {
-	ch := make(chan os.Signal, 2)
-	signal.Notify(ch, os.Interrupt)
-
-	go func() {
-		<-ch
-		f()
-
-		if exitRightNow {
-			os.Exit(0)
-		}
-	}()
 }
 
 // IfElse return then if condition is true,  else els if false.
