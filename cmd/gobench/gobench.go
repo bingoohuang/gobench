@@ -123,6 +123,7 @@ Options:
   -body[:cond]     A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
   -eval dd:seq     Eval dd in url/body(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
   -eval dd:seq0    Eval dd in url/body(eg. dd:seq0 will evaluated to 0-n, d00:seq will evaluated to 00-99) 
+  -seq             Start sequence number for request header X-Gobench-Seq 
 `
 
 func usageAndExit(msg string) {
@@ -169,12 +170,15 @@ func (a *App) Init() {
 	cond := flag.String("ok", "", "")
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
+	argSeq := flag.Int("seq", 0, "")
 
 	flag.Parse()
 	if *version {
 		fmt.Println("v1.0.3 at 2021-03-24 23:04:19")
 		os.Exit(0)
 	}
+
+	seq = int32(*argSeq)
 
 	if a.weedMasterURL != "" {
 		var err error
