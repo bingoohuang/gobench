@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -52,7 +53,7 @@ import (
 type App struct {
 	requests, requestsTotal, goroutines, connections                int
 	method, duration, urls, postData, uFilePath                     string
-	keepAlive, exitRequested                                        bool
+	keepAlive                                                       bool
 	uploadRandImg, printResult                                      string
 	timeout, thinkMin, thinkMax                                     time.Duration
 	rThroughput, wThroughput                                        uint64
@@ -73,6 +74,8 @@ type App struct {
 	bodyPrintCh chan string
 	waitGroup   *sync.WaitGroup
 	seqFn       func(s ...string) []string
+	ctx         context.Context
+	ctxCancel   context.CancelFunc
 }
 
 // Conf for gobench.
@@ -375,7 +378,11 @@ func findUnit(s string) string {
 }
 
 func main() {
-	var app App
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	app := &App{
+		ctx:       ctx,
+		ctxCancel: ctxCancel,
+	}
 
 	app.Init()
 
@@ -395,8 +402,7 @@ func main() {
 
 	startTime := time.Now()
 
-	HandleInterrupt(func() { app.exitRequested = true }, false)
-
+	HandleInterrupt(func() { app.ctx.Done() }, false)
 	c := app.NewConfiguration()
 	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines, startTime.Format("2006-01-02 15:04:05.000"))
 
@@ -410,33 +416,7 @@ func main() {
 	go stating(resultChan, &rr, totalReqsChan, statComplete)
 
 	requestsChan := make(chan int, app.goroutines)
-	barIncr := func() {}
-	barFinish := func() {}
-
-	if app.printResult == "" {
-		if app.requestsTotal > 0 {
-			bar := pb.StartNew(app.requestsTotal)
-			barIncr = func() { bar.Increment() }
-			barFinish = func() { bar.Finish() }
-		} else {
-			bar := pb.StartNew(int(c.duration.Seconds()))
-			barFinish = func() {
-				for bar.Current() < bar.Total() {
-					bar.Increment()
-				}
-				bar.Finish()
-			}
-			go func() {
-				ticker := time.NewTicker(1 * time.Second)
-				defer ticker.Stop()
-				for range ticker.C {
-					if bar.Increment(); bar.Current() >= bar.Total() {
-						return
-					}
-				}
-			}()
-		}
-	}
+	barIncr, barFinish := createBars(app, c)
 
 	for i := 0; i < app.goroutines; i++ {
 		reqs := c.requests
@@ -469,6 +449,35 @@ func main() {
 
 	app.waitGroup.Wait()
 	app.printResults(startTime, totalRequests, rr)
+}
+
+func createBars(app *App, c *Conf) (barIncr, barFinish func()) {
+	if app.printResult != "" {
+		return func() {}, func() {}
+	}
+
+	if app.requestsTotal > 0 {
+		bar := pb.StartNew(app.requestsTotal)
+		return func() { bar.Increment() }, func() { bar.Finish() }
+	}
+
+	bar := pb.StartNew(int(c.duration.Seconds()))
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if bar.Increment(); bar.Current() >= bar.Total() {
+				return
+			}
+		}
+	}()
+
+	return func() {}, func() {
+		for bar.Current() < bar.Total() {
+			bar.Increment()
+		}
+		bar.Finish()
+	}
 }
 
 func (a *App) printResults(startTime time.Time, totalRequests int, rr requestResult) {
@@ -814,7 +823,7 @@ func (a *App) client(barIncr func(), requestsChan chan int, resultChan chan requ
 
 	i := 0
 	count := 0
-	for ; !a.exitRequested && (req == 0 || i < req); i++ {
+	for ; a.ctx.Err() == nil && (req == 0 || i < req); i++ {
 		addr := ""
 		if urlIndex >= 0 {
 			addr = conf.urls[urlIndex]
@@ -892,9 +901,12 @@ func (a *App) do(barIncr func(), rc chan requestResult, cnf *Conf, addr, method,
 		return 1
 	}
 
-	for _, pr := range cnf.profiles {
+	for i, pr := range cnf.profiles {
 		a.execProfile(rc, cnf, addr, rsp, pr, err, statusCode, fileName)
 		barIncr()
+		if a.ctx.Err != nil {
+			return i + 1
+		}
 	}
 
 	return len(cnf.profiles)
@@ -939,7 +951,8 @@ func SetGobenchHeaders(req *fasthttp.Request) {
 	SetHeader(req, "X-Gobench-Time", time.Now().Format(`2006-01-02 15:04:05.000`))
 }
 
-func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string, contentType string, fileName string, postData []byte, rsp *fasthttp.Response, err error, statusCode int) {
+func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string, contentType string, fileName string,
+	postData []byte, rsp *fasthttp.Response, err error, statusCode int) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	rsp = fasthttp.AcquireResponse()
@@ -1378,7 +1391,7 @@ func (t *Throttle) Allow() bool {
 	}
 }
 
-// Return based on proxy url
+// NewProxyConn based on proxy url.
 func NewProxyConn(proxyUrl string) (ProxyConn, error) {
 	u, err := url.Parse(proxyUrl)
 	if err != nil {
@@ -1395,18 +1408,18 @@ func NewProxyConn(proxyUrl string) (ProxyConn, error) {
 	}
 }
 
-// ProxyConn is used to define the proxy
+// ProxyConn is used to define the proxy.
 type ProxyConn interface {
 	Dial(network string, address string) (net.Conn, error)
 }
 
-// DefaultClient is used to implement a proxy in default
+// DefaultClient is used to implement a proxy in default.
 type DefaultClient struct {
 	rAddr *net.TCPAddr
 }
 
-// Socks5 implementation of ProxyConn
-// Set KeepAlive=-1 to reduce the call of syscall
+// Dial implementation of ProxyConn.
+// Set KeepAlive=-1 to reduce the call of syscall.
 func (dc *DefaultClient) Dial(network string, address string) (conn net.Conn, err error) {
 	if dc.rAddr == nil {
 		if dc.rAddr, err = net.ResolveTCPAddr("tcp", address); err != nil {
@@ -1421,7 +1434,7 @@ type Socks5Client struct {
 	proxyUrl *url.URL
 }
 
-// Socks5 implementation of ProxyConn
+// Dial implementation of ProxyConn.
 func (s5 *Socks5Client) Dial(network string, address string) (net.Conn, error) {
 	d, err := proxy.FromURL(s5.proxyUrl, nil)
 	if err != nil {
@@ -1431,7 +1444,7 @@ func (s5 *Socks5Client) Dial(network string, address string) (net.Conn, error) {
 	return d.Dial(network, address)
 }
 
-// Socks5Client is used to implement a proxy in http
+// HttpClient is used to implement a proxy in http.
 type HttpClient struct {
 	proxyUrl *url.URL
 }

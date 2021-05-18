@@ -1,6 +1,6 @@
 module github.com/bingoohuang/http-upload-benchmark
 
-go 1.12
+go 1.16
 
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
@@ -17,6 +17,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/satori/go.uuid v1.2.0
 	github.com/tidwall/gjson v1.6.3
-	github.com/valyala/fasthttp v1.21.0
-	golang.org/x/net v0.0.0-20201016165138-7b1cca2348c0
+	github.com/valyala/fasthttp v1.24.0
+	golang.org/x/net v0.0.0-20210226101413-39120d07d75e
 )
