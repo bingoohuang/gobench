@@ -904,7 +904,7 @@ func (a *App) do(barIncr func(), rc chan requestResult, cnf *Conf, addr, method,
 	for i, pr := range cnf.profiles {
 		a.execProfile(rc, cnf, addr, rsp, pr, err, statusCode, fileName)
 		barIncr()
-		if a.ctx.Err != nil {
+		if a.ctx.Err() != nil {
 			return i + 1
 		}
 	}
