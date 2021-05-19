@@ -473,6 +473,9 @@ func createBars(app *App, c *Conf) (barIncr, barFinish func()) {
 			case <-ticker.C:
 				bar.Increment()
 			case <-app.ctx.Done():
+				if diff := bar.Total() - bar.Current(); diff > 0 {
+					bar.Add64(diff)
+				}
 				return
 			}
 		}
@@ -919,7 +922,7 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 	rsp = fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(rsp)
 
-	if a.profileBaseURL != "" && !strings.HasPrefix(pr.URL, "http") {
+	if a.profileBaseURL != "" {
 		joined, err := CreateUri(a.profileBaseURL, pr.URL, nil)
 		if err != nil {
 			log.Fatalf("eror %v", err)
@@ -1473,7 +1476,7 @@ func CreateUri(baseUri, relativeUri string, query map[string]string) (string, er
 	}
 	u.RawQuery = q.Encode()
 
-	base, err := url.Parse(baseUri)
+	base, err := url.Parse(fixUrl("", baseUri))
 	if err != nil {
 		return "", err
 	}
