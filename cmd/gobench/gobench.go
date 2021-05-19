@@ -924,9 +924,9 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 		if err != nil {
 			log.Fatalf("eror %v", err)
 		}
-		req.SetRequestURI(joined)
+		req.SetRequestURI(fixUrl("", joined))
 	} else {
-		req.SetRequestURI(pr.URL)
+		req.SetRequestURI(fixUrl("", pr.URL))
 	}
 
 	req.Header.SetMethod(pr.Method)
@@ -965,7 +965,7 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 		postDataStr = ret[1]
 		a.responsePrinter("url: " + addr)
 	}
-	req.SetRequestURI(addr)
+	req.SetRequestURI(fixUrl("", addr))
 	req.Header.SetMethod(method)
 	SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
 	SetHeader(req, "Authorization", cnf.authHeader)
