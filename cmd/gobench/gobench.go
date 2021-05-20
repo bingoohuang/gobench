@@ -496,11 +496,11 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 
 	fmt.Fprintf(w, "Total requests:\t%d hits\n", totalRequests)
 	fmt.Fprintf(w, "OK    requests:\t%d hits\n", rr.success)
-	fmt.Fprintf(w, "Network failed:\t%d hits\n", rr.networkFailed)
+	fmt.Fprintf(w, "Network failed(NF):\t%d hits\n", rr.networkFailed)
 	if a.cond == nil {
-		fmt.Fprintf(w, "Bad requests(!2xx):\t%d hits\n", rr.badFailed)
+		fmt.Fprintf(w, "Bad requests(!2xx)(BF):\t%d hits\n", rr.badFailed)
 	} else {
-		fmt.Fprintf(w, "Bad requests(!2xx/%s):\t%d hits\n", a.cond, rr.badFailed)
+		fmt.Fprintf(w, "Bad requests(!2xx/%s)(BF):\t%d hits\n", a.cond, rr.badFailed)
 	}
 	fmt.Fprintf(w, "OK requests rate:\t%0.3f hits/sec\n", float64(rr.success)/elapsedSeconds)
 	fmt.Fprintf(w, "Read throughput:\t%s/sec\n",
@@ -922,6 +922,7 @@ func (a *App) do(barIncr func(), rc chan requestResult, cnf *Conf, addr, method,
 type MethodInfo struct {
 	Count      int
 	GobenchSeq int32
+	requestResult
 }
 type MethodsStat struct {
 	Stat map[string]*MethodInfo
@@ -944,6 +945,21 @@ func (s *MethodsStat) Incr(method string, gobenchSeq int32) {
 	v.GobenchSeq = gobenchSeq
 }
 
+func (s *MethodsStat) IncrResult(method string, rr requestResult) {
+	s.Lock()
+	defer s.Unlock()
+
+	v, ok := s.Stat[method]
+	if !ok {
+		v = &MethodInfo{}
+		s.Stat[method] = v
+	}
+
+	v.success += rr.success
+	v.networkFailed += rr.networkFailed
+	v.badFailed += rr.badFailed
+}
+
 func (s *MethodsStat) ShowStats(w *tabwriter.Writer) bool {
 	s.Lock()
 	defer s.Unlock()
@@ -955,10 +971,13 @@ func (s *MethodsStat) ShowStats(w *tabwriter.Writer) bool {
 	methods := make([]string, 0, len(s.Stat))
 	counts := make([]string, 0, len(s.Stat))
 	seqs := make([]string, 0, len(s.Stat))
-
 	for k, v := range s.Stat {
 		methods = append(methods, k)
-		counts = append(counts, fmt.Sprintf("%d", v.Count))
+		if v.badFailed == 0 && v.networkFailed == 0 {
+			counts = append(counts, fmt.Sprintf("%d", v.Count))
+		} else {
+			counts = append(counts, fmt.Sprintf("%d(OK:%d NF:%d BF:%d)", v.Count, v.success, v.networkFailed, v.badFailed))
+		}
 		seqs = append(seqs, fmt.Sprintf("%d", v.GobenchSeq))
 	}
 	fmt.Fprintf(w, "# of %s:\t%s\n", strings.Join(methods, "/"), strings.Join(counts, "/"))
@@ -993,7 +1012,8 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 
 	err = cnf.myClient.Do(req, rsp)
 	statusCode = rsp.StatusCode()
-	a.checkResult(rc, err, statusCode, rsp, addr, fileName)
+	rr := a.checkResult(rc, err, statusCode, rsp, addr, fileName)
+	methodsStat.IncrResult(pr.Method, rr)
 }
 
 var seq int32
@@ -1036,11 +1056,9 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 	a.checkResult(rc, err, statusCode, rsp, addr, fileName)
 }
 
-func (a *App) checkResult(rc chan requestResult, err error, statusCode int, rsp *fasthttp.Response, addr string, fileName string) {
-	var (
-		rr         requestResult
-		resultDesc string
-	)
+func (a *App) checkResult(rc chan requestResult, err error, statusCode int, rsp *fasthttp.Response, addr string, fileName string) requestResult {
+	var rr requestResult
+	var resultDesc string
 
 	switch {
 	case err != nil:
@@ -1062,6 +1080,7 @@ func (a *App) checkResult(rc chan requestResult, err error, statusCode int, rsp 
 	a.printResponse(addr, fileName, resultDesc, statusCode, rsp)
 
 	rc <- rr
+	return rr
 }
 
 func (a *App) isOK(resp *fasthttp.Response) bool {
