@@ -509,8 +509,10 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 		humanize.IBytes(uint64(float64(a.wThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Test time:\t%s(%s-%s)\n", elapsed.Round(time.Millisecond).String(),
 		startTime.Format("2006-01-02 15:04:05.000"), endTime.Format("15:04:05.000"))
-	fmt.Fprintf(w, "Max X-Gobench-Seq:\t%d\n", SecCur())
-	methodsStat.ShowStats(w)
+
+	if !methodsStat.ShowStats(w) {
+		fmt.Fprintf(w, "Max X-Gobench-Seq:\t%d\n", SecCur())
+	}
 	w.Flush()
 }
 
@@ -917,27 +919,51 @@ func (a *App) do(barIncr func(), rc chan requestResult, cnf *Conf, addr, method,
 	return len(cnf.profiles)
 }
 
+type MethodInfo struct {
+	Count      int
+	GobenchSeq int32
+}
 type MethodsStat struct {
-	Stat map[string]int
+	Stat map[string]*MethodInfo
 	sync.Mutex
 }
 
-var methodsStat = &MethodsStat{Stat: make(map[string]int)}
+var methodsStat = &MethodsStat{Stat: make(map[string]*MethodInfo)}
 
-func (s *MethodsStat) Incr(method string) {
+func (s *MethodsStat) Incr(method string, gobenchSeq int32) {
 	s.Lock()
 	defer s.Unlock()
 
-	s.Stat[method] += 1
+	v, ok := s.Stat[method]
+	if !ok {
+		v = &MethodInfo{}
+		s.Stat[method] = v
+	}
+
+	v.Count++
+	v.GobenchSeq = gobenchSeq
 }
 
-func (s *MethodsStat) ShowStats(w *tabwriter.Writer) {
+func (s *MethodsStat) ShowStats(w *tabwriter.Writer) bool {
 	s.Lock()
 	defer s.Unlock()
 
-	for k, v := range s.Stat {
-		fmt.Fprintf(w, "#%s:\t%d\n", k, v)
+	if len(s.Stat) == 0 {
+		return false
 	}
+
+	methods := make([]string, 0, len(s.Stat))
+	counts := make([]string, 0, len(s.Stat))
+	seqs := make([]string, 0, len(s.Stat))
+
+	for k, v := range s.Stat {
+		methods = append(methods, k)
+		counts = append(counts, fmt.Sprintf("%d", v.Count))
+		seqs = append(seqs, fmt.Sprintf("%d", v.GobenchSeq))
+	}
+	fmt.Fprintf(w, "# of %s:\t%s\n", strings.Join(methods, "/"), strings.Join(counts, "/"))
+	fmt.Fprintf(w, "Last X-Gobench-Seq %s:\t%s\n", strings.Join(methods, "/"), strings.Join(seqs, "/"))
+	return true
 }
 
 func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fasthttp.Response, pr *Profile, err error, statusCode int, fileName string) {
@@ -957,12 +983,12 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 	}
 
 	req.Header.SetMethod(pr.Method)
-	methodsStat.Incr(pr.Method)
+
 	for k, v := range pr.Headers {
 		SetHeader(req, k, v)
 	}
-	SetGobenchHeaders(req)
-
+	gobenchSeq := SetGobenchHeaders(req)
+	methodsStat.Incr(pr.Method, gobenchSeq)
 	req.SetBody([]byte(pr.Body))
 
 	err = cnf.myClient.Do(req, rsp)
@@ -975,9 +1001,11 @@ var seq int32
 func SecCur() int32 { return atomic.LoadInt32(&seq) }
 func SeqInc() int32 { return atomic.AddInt32(&seq, 1) }
 
-func SetGobenchHeaders(req *fasthttp.Request) {
-	SetHeader(req, "X-Gobench-Seq", fmt.Sprintf("%d", SeqInc()))
+func SetGobenchHeaders(req *fasthttp.Request) int32 {
+	seq := SeqInc()
+	SetHeader(req, "X-Gobench-Seq", fmt.Sprintf("%d", seq))
 	SetHeader(req, "X-Gobench-Time", time.Now().Format(`2006-01-02 15:04:05.000`))
+	return seq
 }
 
 func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string, contentType string, fileName string,
