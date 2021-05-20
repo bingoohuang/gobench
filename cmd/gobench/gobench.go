@@ -494,22 +494,23 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
 
-	fmt.Fprintf(w, "Total Requests:\t%d hits\n", totalRequests)
-	fmt.Fprintf(w, "Successful requests:\t%d hits\n", rr.success)
+	fmt.Fprintf(w, "Total requests:\t%d hits\n", totalRequests)
+	fmt.Fprintf(w, "OK    requests:\t%d hits\n", rr.success)
 	fmt.Fprintf(w, "Network failed:\t%d hits\n", rr.networkFailed)
 	if a.cond == nil {
 		fmt.Fprintf(w, "Bad requests(!2xx):\t%d hits\n", rr.badFailed)
 	} else {
 		fmt.Fprintf(w, "Bad requests(!2xx/%s):\t%d hits\n", a.cond, rr.badFailed)
 	}
-	fmt.Fprintf(w, "Successful requests rate:\t%0.3f hits/sec\n", float64(rr.success)/elapsedSeconds)
+	fmt.Fprintf(w, "OK requests rate:\t%0.3f hits/sec\n", float64(rr.success)/elapsedSeconds)
 	fmt.Fprintf(w, "Read throughput:\t%s/sec\n",
 		humanize.IBytes(uint64(float64(a.rThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Write throughput:\t%s/sec\n",
 		humanize.IBytes(uint64(float64(a.wThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Test time:\t%s(%s-%s)\n", elapsed.Round(time.Millisecond).String(),
 		startTime.Format("2006-01-02 15:04:05.000"), endTime.Format("15:04:05.000"))
-	fmt.Fprintf(w, "X-Gobench-Seq:\t%d\n", SecCur())
+	fmt.Fprintf(w, "Max X-Gobench-Seq:\t%d\n", SecCur())
+	methodsStat.ShowStats(w)
 	w.Flush()
 }
 
@@ -916,6 +917,29 @@ func (a *App) do(barIncr func(), rc chan requestResult, cnf *Conf, addr, method,
 	return len(cnf.profiles)
 }
 
+type MethodsStat struct {
+	Stat map[string]int
+	sync.Mutex
+}
+
+var methodsStat = &MethodsStat{Stat: make(map[string]int)}
+
+func (s *MethodsStat) Incr(method string) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.Stat[method] += 1
+}
+
+func (s *MethodsStat) ShowStats(w *tabwriter.Writer) {
+	s.Lock()
+	defer s.Unlock()
+
+	for k, v := range s.Stat {
+		fmt.Fprintf(w, "#%s:\t%d\n", k, v)
+	}
+}
+
 func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fasthttp.Response, pr *Profile, err error, statusCode int, fileName string) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
@@ -933,6 +957,7 @@ func (a *App) execProfile(rc chan requestResult, cnf *Conf, addr string, rsp *fa
 	}
 
 	req.Header.SetMethod(pr.Method)
+	methodsStat.Incr(pr.Method)
 	for k, v := range pr.Headers {
 		SetHeader(req, k, v)
 	}
