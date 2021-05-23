@@ -21,4 +21,3 @@ require (
 	golang.org/x/net v0.0.0-20210226101413-39120d07d75e
 )
 
-replace github.com/bingoohuang/gg => ../gg
