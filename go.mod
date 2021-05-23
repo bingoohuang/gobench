@@ -20,4 +20,3 @@ require (
 	github.com/valyala/fasthttp v1.24.0
 	golang.org/x/net v0.0.0-20210226101413-39120d07d75e
 )
-
