@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
-	github.com/bingoohuang/gg v0.0.0-20210419094606-9dcff1e6fa7a
+	github.com/bingoohuang/gg v0.0.0-20210523100036-5c12dba40c7d
 	github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da
 	github.com/bingoohuang/jj v0.0.0-20210318135333-e12a222e0bad
 	github.com/cheggaaa/pb/v3 v3.0.7
@@ -20,3 +20,5 @@ require (
 	github.com/valyala/fasthttp v1.24.0
 	golang.org/x/net v0.0.0-20210226101413-39120d07d75e
 )
+
+replace github.com/bingoohuang/gg => ../gg
