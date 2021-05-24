@@ -219,6 +219,15 @@ func (a *App) Init() {
 
 func (a *App) parseEval(eval string) {
 	if eval == "" {
+		a.seqFn = func(ss ...string) []string {
+			ret := make([]string, len(ss))
+			un := uuid.NewV4().String()
+			for i, s := range ss {
+				ret[i] = strings.ReplaceAll(s, "{uuid}", un)
+			}
+
+			return ret
+		}
 		return
 	}
 
