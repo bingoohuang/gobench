@@ -1,0 +1,30 @@
+{
+  "idCode": "{{uuid}}",
+  "licenseCode": "{{uuid}}",
+  "implementCode": "10003230100002888X110000",
+  "name": "养狗证",
+  "licenseStatus": "ISSUED",
+  "holderName": [
+    "{{姓名}}"
+  ],
+  "holderIdentityType": "10",
+  "holderIdentityNum": [
+    "{{身份证}}"
+  ],
+  "dataType": "INTEGRATION",
+  "bizType": "LICENSE_ISSUE",
+  "bizStatus": "PASSED",
+  "implementOrgCode": "00002888X",
+  "issueOrgName": "{{发证机关}}",
+  "issueOrgCode": "22220228000107924A",
+  "divisionCode": "110118000000",
+  "auditTime": "{{now}}",
+  "issueDate": "2009-06-30T16:00:00Z",
+  "areaCode": "110000",
+  "trustLevel": "A",
+  "id": "{{uuid}}",
+  "createdBy": "*SYSADM*",
+  "createdDate": "2000-08-11T08:00:58Z",
+  "lastModifiedBy": "*SYSADM*",
+  "lastModifiedDate": "2000-08-11T08:10:07Z"
+}
