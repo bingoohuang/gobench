@@ -50,7 +50,7 @@ func (c *Config) client() {
 
 func (c *Config) send(conn net.Conn, data []byte) error {
 	//data := "OPTIONS * HTTP/1.1\r\nHost: localhost:5003\r\nContent-Length: 18\r\nContent-Type: application/json\r\n\r\n{\"name\": \"bingoo\"}"
-	s := strings.TrimSpace(strings.NewReplacer("\r\n", "\r\n", "\n", "\r\n").Replace(string(data)))
+	s := strings.TrimSpace(strings.NewReplacer(`\r\n`, "\r\n", `\n`, "\r\n", "\r\n", "\r\n", "\n", "\r\n").Replace(string(data)))
 	if v := FindContentLength(s); v == 0 {
 		s += "\r\n\r\n"
 	}
