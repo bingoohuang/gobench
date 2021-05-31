@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/bingoohuang/gg/pkg/chinaid"
 	flag "github.com/bingoohuang/gg/pkg/fla9"
 	"github.com/bingoohuang/jj"
 	"github.com/cheggaaa/pb/v3"
+	"github.com/mitchellh/go-homedir"
 	"io"
 	"io/ioutil"
 	"log"
@@ -39,6 +41,7 @@ import (
 	"github.com/tidwall/gjson"
 	"golang.org/x/net/proxy"
 
+	"github.com/bingoohuang/gg/pkg/rand"
 	"github.com/bingoohuang/golang-trial/randimg"
 	"github.com/dustin/go-humanize"
 
@@ -221,9 +224,8 @@ func (a *App) parseEval(eval string) {
 	if eval == "" {
 		a.seqFn = func(ss ...string) []string {
 			ret := make([]string, len(ss))
-			un := uuid.NewV4().String()
 			for i, s := range ss {
-				ret[i] = strings.ReplaceAll(s, "{uuid}", un)
+				ret[i] = EvalTemplate(s)
 			}
 
 			return ret
@@ -249,11 +251,9 @@ func (a *App) parseEval(eval string) {
 		f := func(ss []string, i int64) []string {
 			seqStr := fmt.Sprintf("%d", i)
 			ret := make([]string, len(ss))
-			un := uuid.NewV4().String()
-
 			for i, s := range ss {
 				s = strings.ReplaceAll(s, pattern, prepend+seqStr)
-				ret[i] = strings.ReplaceAll(s, "{uuid}", un)
+				ret[i] = EvalTemplate(s)
 			}
 			return ret
 		}
@@ -272,10 +272,9 @@ func (a *App) parseEval(eval string) {
 			f = func(ss []string, i int64) []string {
 				seqStr := fmt.Sprintf("%0*d", width, i)
 				ret := make([]string, len(ss))
-				un := uuid.NewV4().String()
 				for i, s := range ss {
 					s = strings.ReplaceAll(s, pattern, left+seqStr+right)
-					ret[i] = strings.ReplaceAll(s, "{uuid}", un)
+					ret[i] = EvalTemplate(s)
 				}
 				return ret
 			}
@@ -311,11 +310,6 @@ func (a *App) parseCond(cond string) {
 	a.cond = expr
 }
 
-func randInt(n int64) int64 {
-	result, _ := rand.Int(rand.Reader, big.NewInt(n))
-	return result.Int64()
-}
-
 func (a *App) thinking() {
 	if a.thinkMax == 0 {
 		return
@@ -325,7 +319,7 @@ func (a *App) thinking() {
 	if a.thinkMax == a.thinkMin {
 		thinkTime = a.thinkMin
 	} else {
-		thinkTime = time.Duration(randInt(int64(a.thinkMax-a.thinkMin))) + a.thinkMin
+		thinkTime = time.Duration(CryptoRandInt(int64(a.thinkMax-a.thinkMin))) + a.thinkMin
 	}
 
 	a.responsePrinter("think " + thinkTime.String() + "...")
@@ -693,7 +687,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 						return errStopped
 					}
 
-					if randInt(10) != 0 {
+					if CryptoRandInt(10) != 0 {
 						return nil
 					}
 
@@ -724,7 +718,7 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 
 	if a.postData != "" {
 		if strings.HasPrefix(a.postData, "@") {
-			postDataFile := a.postData[1:]
+			postDataFile, _ := homedir.Expand(a.postData[1:])
 			c.postData, err = ioutil.ReadFile(postDataFile)
 			if err != nil {
 				log.Fatalf("Error in ioutil.ReadFile for file path: %s Error: %v", postDataFile, err)
@@ -801,7 +795,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 	)
 
 	if imageSize == "" {
-		size = (randInt(4) + 1) << 20 //  << 20 means MiB
+		size = (CryptoRandInt(4) + 1) << 20 //  << 20 means MiB
 	} else {
 		if size, err = units.FromHumanSize(a.fixedImgSize); err != nil {
 			log.Fatal("error fixedImgSize ", err.Error())
@@ -831,7 +825,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 func (a *App) client(barIncr func(), requestsChan chan int, resultChan chan requestResult, conf *Conf, req int) {
 	urlIndex := -1
 	if len(conf.urls) > 0 {
-		urlIndex = int(randInt(int64(len(conf.urls))))
+		urlIndex = int(CryptoRandInt(int64(len(conf.urls))))
 	}
 
 	i := 0
@@ -1771,4 +1765,93 @@ func fixUrl(baseUrl, s string) string {
 	}
 
 	return u.String()
+}
+
+type Part interface {
+	Eval() string
+}
+type Var struct {
+	Gen func() interface{}
+}
+
+type Literal struct{ V string }
+
+func (l Literal) Eval() string { return l.V }
+func (l Var) Eval() string     { return fmt.Sprintf("%s", l.Gen()) }
+func (l Parts) Eval() string {
+	sb := strings.Builder{}
+	for _, p := range l {
+		sb.WriteString(p.Eval())
+	}
+	return sb.String()
+}
+
+type Parts []Part
+
+var templateVar = regexp.MustCompile(`[${]?\{.*?\}\}?`)
+
+func EvalTemplate(s string) string {
+	return ParseTemplate(s).Eval()
+}
+
+func ParseTemplate(s string) (parts Parts) {
+	locs := templateVar.FindAllStringSubmatchIndex(s, -1)
+	start := 0
+
+	localGenFn := make(map[string]genFn)
+
+	for _, loc := range locs {
+		parts = append(parts, &Literal{V: s[start:loc[0]]})
+		sub := s[loc[0]+1 : loc[1]-1]
+		sub = strings.TrimPrefix(sub, "{")
+		sub = strings.TrimSuffix(sub, "}")
+		start = loc[1]
+
+		vn := strings.ToLower(strings.TrimSpace(sub))
+		if _, ok := localGenFn[vn]; !ok {
+			if ff, fok := genFfnMap[vn]; !fok {
+				localGenFn[vn] = func() interface{} { return sub }
+			} else {
+				localGenFn[vn] = ff()
+			}
+		}
+
+		parts = append(parts, &Var{Gen: localGenFn[vn]})
+	}
+
+	if start < len(s) {
+		parts = append(parts, &Literal{V: s[start:]})
+	}
+
+	return parts
+}
+
+type genFn func() interface{}
+
+var genFfnMap = map[string]func() genFn{
+	"uuid": func() genFn {
+		return func() interface{} { return uuid.NewV4().String() }
+	},
+	"random_string": func() genFn {
+		return func() interface{} { return rand.String(100) }
+	},
+	// generate once, use later
+	"random_string_0": func() genFn {
+		s := rand.String(100)
+		return func() interface{} { return s }
+	},
+
+	"姓名":   func() genFn { return func() interface{} { return chinaid.Name() } },
+	"性别":   func() genFn { return func() interface{} { return chinaid.Sex() } },
+	"地址":   func() genFn { return func() interface{} { return chinaid.Address() } },
+	"手机":   func() genFn { return func() interface{} { return chinaid.Mobile() } },
+	"身份证":  func() genFn { return func() interface{} { return chinaid.ChinaID() } },
+	"发证机关": func() genFn { return func() interface{} { return chinaid.IssueOrg() } },
+	"邮箱":   func() genFn { return func() interface{} { return chinaid.Email() } },
+	"银行卡":  func() genFn { return func() interface{} { return chinaid.BankNo() } },
+}
+
+func CryptoRandInt(n int64) int64 {
+	result, _ := crand.Int(crand.Reader, big.NewInt(n))
+	return result.Int64()
 }
