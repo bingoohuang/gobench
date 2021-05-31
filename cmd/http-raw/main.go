@@ -55,7 +55,7 @@ func (c *Config) send(conn net.Conn, data []byte) error {
 		s += "\r\n\r\n"
 	}
 
-	fmt.Printf("Request: === start ===\n%s\nRequest: === end ===\n", ss.Jsonify(s))
+	fmt.Printf("Request: %s\n", ss.Jsonify(s))
 
 	if _, err := conn.Write([]byte(s)); err != nil { // 发送数据
 		return err
