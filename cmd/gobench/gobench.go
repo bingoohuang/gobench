@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"github.com/bingoohuang/gg/pkg/chinaid"
 	flag "github.com/bingoohuang/gg/pkg/fla9"
+	"github.com/bingoohuang/gg/pkg/rest"
+	"github.com/bingoohuang/gg/pkg/ss"
 	"github.com/bingoohuang/jj"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/mitchellh/go-homedir"
@@ -651,8 +653,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 	}
 
 	// 单个上传文件
-	a.tryMethod(c, http.MethodPost)
-
+	c.method = ss.Or(c.method, http.MethodPost)
 	c.postFileChannel = make(chan string, 1)
 	isSingleFile := !fs.IsDir()
 
@@ -713,7 +714,7 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 
 	var err error
 
-	a.tryMethod(c, http.MethodPost)
+	c.method = ss.Or(c.method, http.MethodPost)
 
 	if a.postData != "" {
 		if strings.HasPrefix(a.postData, "@") {
@@ -734,12 +735,6 @@ func (a *App) dealPostDataFilePath(c *Conf) {
 		} else if bytes.HasSuffix(bytes.TrimSpace(c.postData), []byte(">")) {
 			c.contentType = "application/xml; charset=utf-8"
 		}
-	}
-}
-
-func (a *App) tryMethod(c *Conf, method string) {
-	if c.method == "" {
-		c.method = method
 	}
 }
 
@@ -852,12 +847,11 @@ func (a *App) doRequest(barIncr func(), resultChan chan requestResult, c *Conf, 
 	fileName := ""
 
 	if a.uploadRandImg != "" || a.fixedImgSize != "" {
-		a.tryMethod(c, http.MethodPost)
-
+		c.method = ss.Or(c.method, http.MethodPost)
 		postData, contentType, fileName = a.randomImage(a.uploadRandImg, a.fixedImgSize)
 	}
 
-	a.tryMethod(c, http.MethodGet)
+	c.method = ss.Or(c.method, http.MethodGet)
 
 	if c.postFileChannel == nil { // 非目录文件上传请求
 		return a.do(barIncr, resultChan, c, a.weed(addr), c.method, contentType, fileName, postData)
@@ -1036,13 +1030,15 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 	defer fasthttp.ReleaseRequest(req)
 	rsp = fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(rsp)
-	postDataStr := string(postData)
-	if a.seqFn != nil {
-		ret := a.seqFn(addr, postDataStr)
+
+	if fileName == "" {
+		// 文件上传时，不处理请求体
+		ret := a.seqFn(addr, string(postData))
 		addr = ret[0]
-		postDataStr = ret[1]
+		postData = []byte(ret[1])
 		a.responsePrinter("url: " + addr)
 	}
+
 	req.SetRequestURI(fixUrl("", addr))
 	req.Header.SetMethod(method)
 	SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
@@ -1050,7 +1046,7 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 	SetHeader(req, "Content-Type", contentType)
 	SetGobenchHeaders(req)
 
-	req.SetBody([]byte(postDataStr))
+	req.SetBody(postData)
 
 	err = cnf.myClient.Do(req, rsp)
 	statusCode = rsp.StatusCode()
@@ -1313,6 +1309,7 @@ func (a *App) setupWeed(c *fasthttp.Client) {
 		return
 	}
 
+	a.weedMasterURL = fixUrl("", a.weedMasterURL)
 	a.weedVolumeAssignedUrl = make(chan string, 100)
 	go a.assignFids(c)
 }
@@ -1400,11 +1397,7 @@ func ReadUploadMultipartFile(fieldName, filePath string) (imageBytes []byte, con
 	}
 
 	file := MustOpen(filePath)
-	defer func() {
-		if err := file.Close(); err != nil {
-			log.Panicf("close file %s error %v", filePath, err)
-		}
-	}()
+	defer file.Close()
 
 	_, _ = io.Copy(part, file)
 	_ = writer.Close()
@@ -1727,43 +1720,17 @@ Bingoo-Name: bingoohuang
 {"name": "bingoohuang", "age": 1000}
 `
 
-var (
-	reScheme = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+-.]*://`)
-)
-
 func fixUrl(baseUrl, s string) string {
 	if baseUrl != "" {
 		return s
 	}
 
-	defaultScheme := "http"
-	defaultHost := "localhost"
-
-	if s == ":" {
-		s = ":80"
-	}
-
-	// ex) :8080/hello or /hello or :
-	if strings.HasPrefix(s, ":") || strings.HasPrefix(s, "/") {
-		s = defaultHost + s
-	}
-
-	// ex) example.com/hello
-	if !reScheme.MatchString(s) {
-		s = defaultScheme + "://" + s
-	}
-
-	u, err := url.Parse(s)
+	v, err := rest.FixURI(s)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
 
-	u.Host = strings.TrimSuffix(u.Host, ":")
-	if u.Path == "" {
-		u.Path = "/"
-	}
-
-	return u.String()
+	return v
 }
 
 type Part interface {
