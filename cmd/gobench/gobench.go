@@ -1123,11 +1123,11 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 
 	r := time.Now().Format(`2006-01-02 15:04:05.000 `)
 	if a.weedVolumeAssignedUrl != nil {
-		r += "url:" + addr + " "
+		r += "url: " + addr + " "
 	}
 
 	if fileName != "" {
-		r += "file:" + fileName + " "
+		r += "file: " + fileName + " "
 	}
 
 	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] " + resp.String()
