@@ -17,7 +17,6 @@ require (
 	github.com/nacos-group/nacos-sdk-go v1.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/satori/go.uuid v1.2.0
-	github.com/tidwall/gjson v1.6.3
 	github.com/valyala/fasthttp v1.24.0
 	golang.org/x/net v0.0.0-20210226101413-39120d07d75e
 )

@@ -38,7 +38,6 @@ import (
 
 	"github.com/Knetic/govaluate"
 	"github.com/pkg/errors"
-	"github.com/tidwall/gjson"
 	"golang.org/x/net/proxy"
 
 	"github.com/bingoohuang/gg/pkg/rand"
@@ -1092,14 +1091,14 @@ func (a *App) isOK(resp *fasthttp.Response) bool {
 	}
 
 	body := resp.Body()
-	if !gjson.ValidBytes(body) {
+	if !jj.ValidBytes(body) {
 		return false
 	}
 
 	vars := a.cond.Vars()
 	parameters := make(map[string]interface{}, len(vars))
 	for _, v := range vars {
-		jsonValue := gjson.GetBytes(body, v)
+		jsonValue := jj.GetBytes(body, v)
 		parameters[v] = jsonValue.Value()
 	}
 
