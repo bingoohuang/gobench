@@ -11,6 +11,7 @@ import (
 	flag "github.com/bingoohuang/gg/pkg/fla9"
 	"github.com/bingoohuang/gg/pkg/rest"
 	"github.com/bingoohuang/gg/pkg/ss"
+	"github.com/bingoohuang/gg/pkg/vars"
 	"github.com/bingoohuang/jj"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/mitchellh/go-homedir"
@@ -225,7 +226,7 @@ func evaluator(ss ...string) []string {
 	ret := make([]string, len(ss))
 	m := map[string]interface{}{}
 	for i, s := range ss {
-		ret[i] = EvalTemplate(s, m)
+		ret[i] = vars.EvalVarsMap(s, genFfnMap, m).Value
 	}
 
 	return ret
@@ -258,7 +259,7 @@ func (a *App) parseEval(eval string) {
 			m := map[string]interface{}{}
 			for i, s := range ss {
 				s = strings.ReplaceAll(s, pattern, prepend+seqStr)
-				ret[i] = EvalTemplate(s, m)
+				ret[i] = vars.EvalVarsMap(s, genFfnMap, m).Value
 			}
 			return ret
 		}
@@ -280,7 +281,7 @@ func (a *App) parseEval(eval string) {
 				m := map[string]interface{}{}
 				for i, s := range ss {
 					s = strings.ReplaceAll(s, pattern, left+seqStr+right)
-					ret[i] = EvalTemplate(s, m)
+					ret[i] = vars.EvalVarsMap(s, genFfnMap, m).Value
 				}
 				return ret
 			}
@@ -1742,103 +1743,28 @@ func fixUrl(baseUrl, s string) string {
 	return v
 }
 
-type Part interface {
-	Eval(map[string]interface{}) string
-}
-type Var struct {
-	Gen  func() interface{}
-	Name string
-}
-
-type Literal struct{ V string }
-
-func (l Literal) Eval(map[string]interface{}) string { return l.V }
-func (l Var) Eval(m map[string]interface{}) string {
-	if m == nil {
-		return fmt.Sprintf("%s", l.Gen())
-	}
-
-	v, ok := m[l.Name]
-	if !ok {
-		v = l.Gen()
-		m[l.Name] = v
-	}
-
-	return fmt.Sprintf("%s", v)
-}
-
-func (l Parts) Eval(m map[string]interface{}) string {
-	sb := strings.Builder{}
-	for _, p := range l {
-		sb.WriteString(p.Eval(m))
-	}
-	return sb.String()
-}
-
-type Parts []Part
-
-var templateVar = regexp.MustCompile(`[${]?\{.*?\}\}?`)
-
-func EvalTemplate(s string, m map[string]interface{}) string {
-	return ParseTemplate(s).Eval(m)
-}
-
-func ParseTemplate(s string) (parts Parts) {
-	locs := templateVar.FindAllStringSubmatchIndex(s, -1)
-	start := 0
-
-	localGenFn := make(map[string]genFn)
-
-	for _, loc := range locs {
-		parts = append(parts, &Literal{V: s[start:loc[0]]})
-		sub := s[loc[0]+1 : loc[1]-1]
-		sub = strings.TrimPrefix(sub, "{")
-		sub = strings.TrimSuffix(sub, "}")
-		start = loc[1]
-
-		vn := strings.ToLower(strings.TrimSpace(sub))
-		if _, ok := localGenFn[vn]; !ok {
-			if ff, fok := genFfnMap[vn]; !fok {
-				localGenFn[vn] = func() interface{} { return sub }
-			} else {
-				localGenFn[vn] = ff()
-			}
-		}
-
-		parts = append(parts, &Var{Name: vn, Gen: localGenFn[vn]})
-	}
-
-	if start < len(s) {
-		parts = append(parts, &Literal{V: s[start:]})
-	}
-
-	return parts
-}
-
-type genFn func() interface{}
-
-var genFfnMap = map[string]func() genFn{
-	"uuid": func() genFn {
+var genFfnMap = map[string]func() vars.GenFn{
+	"uuid": func() vars.GenFn {
 		return func() interface{} { return uuid.NewV4().String() }
 	},
-	"random_string": func() genFn {
+	"random_string": func() vars.GenFn {
 		return func() interface{} { return rand.String(100) }
 	},
 	// generate once, use later
-	"random_string_0": func() genFn {
+	"random_string_0": func() vars.GenFn {
 		s := rand.String(100)
 		return func() interface{} { return s }
 	},
 
-	"姓名":   func() genFn { return func() interface{} { return chinaid.Name() } },
-	"性别":   func() genFn { return func() interface{} { return chinaid.Sex() } },
-	"地址":   func() genFn { return func() interface{} { return chinaid.Address() } },
-	"手机":   func() genFn { return func() interface{} { return chinaid.Mobile() } },
-	"身份证":  func() genFn { return func() interface{} { return chinaid.ChinaID() } },
-	"发证机关": func() genFn { return func() interface{} { return chinaid.IssueOrg() } },
-	"邮箱":   func() genFn { return func() interface{} { return chinaid.Email() } },
-	"银行卡":  func() genFn { return func() interface{} { return chinaid.BankNo() } },
-	"now":  func() genFn { return func() interface{} { return time.Now().Format(time.RFC3339Nano) } },
+	"姓名":   func() vars.GenFn { return func() interface{} { return chinaid.Name() } },
+	"性别":   func() vars.GenFn { return func() interface{} { return chinaid.Sex() } },
+	"地址":   func() vars.GenFn { return func() interface{} { return chinaid.Address() } },
+	"手机":   func() vars.GenFn { return func() interface{} { return chinaid.Mobile() } },
+	"身份证":  func() vars.GenFn { return func() interface{} { return chinaid.ChinaID() } },
+	"发证机关": func() vars.GenFn { return func() interface{} { return chinaid.IssueOrg() } },
+	"邮箱":   func() vars.GenFn { return func() interface{} { return chinaid.Email() } },
+	"银行卡":  func() vars.GenFn { return func() interface{} { return chinaid.BankNo() } },
+	"now":  func() vars.GenFn { return func() interface{} { return time.Now().Format(time.RFC3339Nano) } },
 }
 
 func CryptoRandInt(n int64) int64 {

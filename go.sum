@@ -19,10 +19,8 @@ github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a/go.mod h1:l
 github.com/averagesecurityguy/random v0.0.0-20180326012618-37cce341d2af/go.mod h1:xlqW8P0gOqVMB8Kp0mMuUznEi1PzjF+mhHTSC+ymalU=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
-github.com/bingoohuang/gg v0.0.0-20210602025250-4c39d6f5bc9f h1:BFO3tFvbACwsDOan3zA0aeXpkU99sqdFFNufbNETSOw=
-github.com/bingoohuang/gg v0.0.0-20210602025250-4c39d6f5bc9f/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
-github.com/bingoohuang/gg v0.0.0-20210604050703-1562b5e69bb7 h1:f6hH9qeS9mQNw2VqeWgNp8W58Buvj5WNxnAXrDya3Qw=
-github.com/bingoohuang/gg v0.0.0-20210604050703-1562b5e69bb7/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
+github.com/bingoohuang/gg v0.0.0-20210604090042-63b46707a0d6 h1:5BGkVwVlrn2GYRc3E7a5eJGlAgkQq6F6pbVPH8aMYyk=
+github.com/bingoohuang/gg v0.0.0-20210604090042-63b46707a0d6/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
 github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da h1:dFfvhjt9bhse3nugSi3o6oHEniyi+LulFrt9FN1OIXs=
 github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da/go.mod h1:zUEUlD+vTxx1oicV3hBp12SQDaYVPAGg4zIzsQoR6tc=
 github.com/bingoohuang/gonet v0.0.0-20190716021716-fd516efe8b31/go.mod h1:lSe5gMXAiQESg/xTshM6sByKvDkMGdDffZSXt0d64JI=
