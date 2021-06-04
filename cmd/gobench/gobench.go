@@ -221,16 +221,19 @@ func (a *App) Init() {
 	}()
 }
 
+func evaluator(ss ...string) []string {
+	ret := make([]string, len(ss))
+	m := map[string]interface{}{}
+	for i, s := range ss {
+		ret[i] = EvalTemplate(s, m)
+	}
+
+	return ret
+}
+
 func (a *App) parseEval(eval string) {
 	if eval == "" {
-		a.seqFn = func(ss ...string) []string {
-			ret := make([]string, len(ss))
-			for i, s := range ss {
-				ret[i] = EvalTemplate(s)
-			}
-
-			return ret
-		}
+		a.seqFn = evaluator
 		return
 	}
 
@@ -252,9 +255,10 @@ func (a *App) parseEval(eval string) {
 		f := func(ss []string, i int64) []string {
 			seqStr := fmt.Sprintf("%d", i)
 			ret := make([]string, len(ss))
+			m := map[string]interface{}{}
 			for i, s := range ss {
 				s = strings.ReplaceAll(s, pattern, prepend+seqStr)
-				ret[i] = EvalTemplate(s)
+				ret[i] = EvalTemplate(s, m)
 			}
 			return ret
 		}
@@ -273,9 +277,10 @@ func (a *App) parseEval(eval string) {
 			f = func(ss []string, i int64) []string {
 				seqStr := fmt.Sprintf("%0*d", width, i)
 				ret := make([]string, len(ss))
+				m := map[string]interface{}{}
 				for i, s := range ss {
 					s = strings.ReplaceAll(s, pattern, left+seqStr+right)
-					ret[i] = EvalTemplate(s)
+					ret[i] = EvalTemplate(s, m)
 				}
 				return ret
 			}
@@ -540,7 +545,6 @@ func stating(resultChan chan requestResult, rr *requestResult, totalReqsChan cha
 		select {
 		case r := <-resultChan:
 			received++
-
 			rr.success += r.success
 			rr.networkFailed += r.networkFailed
 			rr.badFailed += r.badFailed
@@ -553,7 +557,6 @@ func stating(resultChan chan requestResult, rr *requestResult, totalReqsChan cha
 			}
 
 			statComplete <- true
-
 			return
 		}
 	}
@@ -1734,20 +1737,34 @@ func fixUrl(baseUrl, s string) string {
 }
 
 type Part interface {
-	Eval() string
+	Eval(map[string]interface{}) string
 }
 type Var struct {
-	Gen func() interface{}
+	Gen  func() interface{}
+	Name string
 }
 
 type Literal struct{ V string }
 
-func (l Literal) Eval() string { return l.V }
-func (l Var) Eval() string     { return fmt.Sprintf("%s", l.Gen()) }
-func (l Parts) Eval() string {
+func (l Literal) Eval(map[string]interface{}) string { return l.V }
+func (l Var) Eval(m map[string]interface{}) string {
+	if m == nil {
+		return fmt.Sprintf("%s", l.Gen())
+	}
+
+	v, ok := m[l.Name]
+	if !ok {
+		v = l.Gen()
+		m[l.Name] = v
+	}
+
+	return fmt.Sprintf("%s", v)
+}
+
+func (l Parts) Eval(m map[string]interface{}) string {
 	sb := strings.Builder{}
 	for _, p := range l {
-		sb.WriteString(p.Eval())
+		sb.WriteString(p.Eval(m))
 	}
 	return sb.String()
 }
@@ -1756,8 +1773,8 @@ type Parts []Part
 
 var templateVar = regexp.MustCompile(`[${]?\{.*?\}\}?`)
 
-func EvalTemplate(s string) string {
-	return ParseTemplate(s).Eval()
+func EvalTemplate(s string, m map[string]interface{}) string {
+	return ParseTemplate(s).Eval(m)
 }
 
 func ParseTemplate(s string) (parts Parts) {
@@ -1782,7 +1799,7 @@ func ParseTemplate(s string) (parts Parts) {
 			}
 		}
 
-		parts = append(parts, &Var{Gen: localGenFn[vn]})
+		parts = append(parts, &Var{Name: vn, Gen: localGenFn[vn]})
 	}
 
 	if start < len(s) {
@@ -1815,6 +1832,7 @@ var genFfnMap = map[string]func() genFn{
 	"发证机关": func() genFn { return func() interface{} { return chinaid.IssueOrg() } },
 	"邮箱":   func() genFn { return func() interface{} { return chinaid.Email() } },
 	"银行卡":  func() genFn { return func() interface{} { return chinaid.BankNo() } },
+	"now":  func() genFn { return func() interface{} { return time.Now().Format(time.RFC3339Nano) } },
 }
 
 func CryptoRandInt(n int64) int64 {
