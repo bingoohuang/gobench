@@ -1039,7 +1039,9 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 		ret := a.seqFn(addr, string(postData))
 		addr = ret[0]
 		postData = []byte(ret[1])
-		a.responsePrinter("url: " + addr)
+		now := Now()
+		a.responsePrinter(now + "URL: " + addr)
+		a.responsePrinter(now + "POST: " + string(postData))
 	}
 
 	req.SetRequestURI(fixUrl("", addr))
@@ -1124,7 +1126,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 		return
 	}
 
-	r := time.Now().Format(`2006-01-02 15:04:05.000 `)
+	r := Now()
 	if a.weedVolumeAssignedUrl != nil {
 		r += "url: " + addr + " "
 	}
@@ -1135,6 +1137,10 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 
 	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] " + resp.String()
 	a.responsePrinter(r)
+}
+
+func Now() string {
+	return time.Now().Format(`2006-01-02 15:04:05.000 `)
 }
 
 // SetHeader set request header if value is not empty.
