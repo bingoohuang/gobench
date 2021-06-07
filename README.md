@@ -1,6 +1,7 @@
 # gobench
 
-a HTTP/HTTPS load testing and benchmarking tool supporting http uploading. Originated from [gobench](https://github.com/cmpxchg16/gobench).
+a HTTP/HTTPS load testing and benchmarking tool supporting http uploading. Originated
+from [gobench](https://github.com/cmpxchg16/gobench).
 
 ```bash
 $ gobench http://127.0.0.1:5003/api/demo  
@@ -49,7 +50,8 @@ Options:
 
 ## Features
 
-- [x] [seeweedfs](https://github.com/chrislusf/seaweedfs) bench support like `gobench -weed=http://192.168.126.5:3333 -u.file=./weedfiles -n=10000 -think 100-500ms -p 1`
+- [x] [seeweedfs](https://github.com/chrislusf/seaweedfs) bench support
+  like `gobench -weed=http://192.168.126.5:3333 -u.file=./weedfiles -n=10000 -think 100-500ms -p 1`
 
 HTTP upload server benchmark in few languages/frameworks and gobench tool
 
@@ -84,6 +86,53 @@ cost time 2.102639ms
 $ kill 48383
 [1]  + 48383 terminated  go-upload-server -impl fasthttp
 $
+```
+
+post json evaluating:
+
+```sh
+$ gobench -l ":5003/license/docs?routing=@身份证_keep" -P @testdata/es.json -n1 -p1
+Dispatching 1 goroutines at 2021-06-07 18:46:53.655
+2021-06-07 18:46:53.656 URL: http://127.0.0.1:5003/license/docs?routing=325981200805085623
+2021-06-07 18:46:53.656 POST: { "idCode": "332a7c20-3704-49f4-a91c-56f605f2c7d1", "licenseCode": "236a85a4-a865-439e-91b0-6d5e81d5ec89", "implementCode": "210109732810121411719", "name": "淩哂证", "licenseStatus": "ISSUED", "holderName": [ "寿幗犮" ], "holderIdentityType": "11", "holderIdentit [ "325981200805085623" ], "dataType": "INTEGRATION", "bizType": "LICENSE_ISSUE", "bizStatus": "PASSED", "implementOrgCode": "971554898", "issueOrgName": "惠州市公安局某某分局", "issueOrgCode": "091933041257201987", "divisionCode": "670066316492", "auditTime": "2063-05-15T08:18:45Z", "issueDat03-05T12:52:17Z", "areaCode": "937212", "trustLevel": "T", "id": "5fca0c02-3942-41d7-a3f9-fc4ae3883c8c", "createdBy": "甘墨錹", "createdDate": "2026-07T18:46:53Z", "lastModifiedBy": "毕亇鳴", "lastModifiedDate": "2018-07-21T08:00:49Z" }
+2021-06-07 18:46:53.657 [√] [200] HTTP/1.1 200 OK Date: Mon, 07 Jun 2021 10:46:53 GMT Content-Type: application/json; charset=utf-8 Content-Length: 8 X-Gobench-Seq: 1 X-Gobench-Time: 2021-06-07 18:46:53.656 {"OK":1}
+```
+
+`@身份证_keep`, the variable name ending with `_keep` will be remembered and reused in the later substitution.
+
+es.json
+
+```json
+{
+  "idCode": "@uuid",
+  "licenseCode": "@uuid",
+  "implementCode": "@regex([1-9][0-9]{20})",
+  "name": "@{XX}证",
+  "licenseStatus": "ISSUED",
+  "holderName": [
+    "@姓名"
+  ],
+  "holderIdentityType": "@regex([0-9]{2})",
+  "holderIdentityNum": [
+    "@身份证_keep"
+  ],
+  "dataType": "INTEGRATION",
+  "bizType": "LICENSE_ISSUE",
+  "bizStatus": "PASSED",
+  "implementOrgCode": "@regex([0-9]{9})",
+  "issueOrgName": "@发证机关",
+  "issueOrgCode": "@regex([0-9]{18})",
+  "divisionCode": "@regex([0-9]{12})",
+  "auditTime": "@random_time(yyyy-MM-ddTHH:mm:ssZ)",
+  "issueDate": "@random_time(yyyy-MM-ddTHH:mm:ssZ)",
+  "areaCode": "@regex([0-9]{6})",
+  "trustLevel": "@regex([A-Z])",
+  "id": "@uuid",
+  "createdBy": "@姓名",
+  "createdDate": "@random_time(now, yyyy-MM-ddTHH:mm:ssZ)",
+  "lastModifiedBy": "@姓名",
+  "lastModifiedDate": "@random_time(yyyy-MM-ddTHH:mm:ssZ)"
+}
 ```
 
 1. benchmarking: `cd scripts; ./start-jmeter-workbench.sh`

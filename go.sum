@@ -19,15 +19,16 @@ github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a/go.mod h1:l
 github.com/averagesecurityguy/random v0.0.0-20180326012618-37cce341d2af/go.mod h1:xlqW8P0gOqVMB8Kp0mMuUznEi1PzjF+mhHTSC+ymalU=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
-github.com/bingoohuang/gg v0.0.0-20210604090042-63b46707a0d6 h1:5BGkVwVlrn2GYRc3E7a5eJGlAgkQq6F6pbVPH8aMYyk=
-github.com/bingoohuang/gg v0.0.0-20210604090042-63b46707a0d6/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
+github.com/bingoohuang/gg v0.0.0-20210607070552-317f8c1bff12/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
+github.com/bingoohuang/gg v0.0.0-20210607102930-5eff6354fadf h1:cDuvyP+/NlhpkQvtJDBGcg4C03TaH4DwIoAcH0fLI48=
+github.com/bingoohuang/gg v0.0.0-20210607102930-5eff6354fadf/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
 github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da h1:dFfvhjt9bhse3nugSi3o6oHEniyi+LulFrt9FN1OIXs=
 github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da/go.mod h1:zUEUlD+vTxx1oicV3hBp12SQDaYVPAGg4zIzsQoR6tc=
 github.com/bingoohuang/gonet v0.0.0-20190716021716-fd516efe8b31/go.mod h1:lSe5gMXAiQESg/xTshM6sByKvDkMGdDffZSXt0d64JI=
 github.com/bingoohuang/goreflect v0.0.0-20200220033105-a0faf449f649/go.mod h1:Jkc9aAuGnMb+GnhLEVtdDnyIZ6Lh6APIITuY+X0HQRU=
 github.com/bingoohuang/gou v0.0.0-20200225004418-9b3655665c46/go.mod h1:lfM/iBkZzlmnl23C+mpqiXAgC6npikzZkKVfNAdC+o4=
-github.com/bingoohuang/jj v0.0.0-20210318135333-e12a222e0bad h1:3iSlbpofTbv5Vx5kPAQWhnBUW32yh6JUKzbD+DEVb6c=
-github.com/bingoohuang/jj v0.0.0-20210318135333-e12a222e0bad/go.mod h1:bWJgpCAKIq/UOMbGxmZlOjU2JZfHhta8XVw5ztrVWRM=
+github.com/bingoohuang/jj v0.0.0-20210607071322-1fd57412ffe9 h1:xE3F0UgYiAXhskEMn3GFOCZl8BKJpChlM6AbYHYrSJA=
+github.com/bingoohuang/jj v0.0.0-20210607071322-1fd57412ffe9/go.mod h1:b4mZ8re/tyziq4rzN7jWoo8bkP3cmKNZ8m2DaS6NSRk=
 github.com/bingoohuang/strcase v0.0.0-20190707081139-fae4a99e1218/go.mod h1:WYrcjWhT2QgbWZcYzfYqWxaxut2hPFa6if/zYwEEEio=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
@@ -219,7 +220,6 @@ github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40T
 github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5/go.mod h1:GEXHk5HgEKCvEIIrSpFI3ozzG5xOKA2DVlEX/gGnewM=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
-github.com/satori/go.uuid v1.2.0 h1:0uYX9dsZ2yD7q2RtLRtPSdGDWzjeM3TbMJP9utgA0ww=
 github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
@@ -243,7 +243,6 @@ github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXf
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
-github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5CcY=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/struCoder/pidusage v0.1.2/go.mod h1:pWBlW3YuSwRl6h7R5KbvA4N8oOqe9LjaKW5CwT1SPjI=

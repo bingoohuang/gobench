@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"github.com/bingoohuang/gg/pkg/chinaid"
 	flag "github.com/bingoohuang/gg/pkg/fla9"
+	"github.com/bingoohuang/gg/pkg/randx"
 	"github.com/bingoohuang/gg/pkg/rest"
 	"github.com/bingoohuang/gg/pkg/ss"
 	"github.com/bingoohuang/gg/pkg/vars"
@@ -18,7 +18,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/big"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -43,14 +42,12 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/proxy"
 
-	"github.com/bingoohuang/gg/pkg/rand"
 	"github.com/bingoohuang/golang-trial/randimg"
 	"github.com/dustin/go-humanize"
 
 	"github.com/valyala/fasthttp"
 
 	"github.com/docker/go-units"
-	"github.com/satori/go.uuid"
 	_ "net/http/pprof"
 )
 
@@ -222,11 +219,41 @@ func (a *App) Init() {
 	}()
 }
 
+type Valuer struct {
+	Map map[string]interface{}
+}
+
+func NewValuer() *Valuer {
+	return &Valuer{
+		Map: make(map[string]interface{}),
+	}
+}
+
+func (v *Valuer) Value(name, params string) interface{} {
+	if x, ok := v.Map[name]; ok {
+		return x
+	}
+
+	if !strings.HasSuffix(name, "_keep") {
+		return jj.DefaultGen.SubstitutionFns.Value(name, params)
+	}
+
+	name = strings.TrimSuffix(name, "_keep")
+	if x, ok := v.Map[name]; ok {
+		return x
+	}
+
+	x := jj.DefaultGen.SubstitutionFns.Value(name, params)
+	v.Map[name] = x
+
+	return x
+}
+
 func evaluator(ss ...string) []string {
 	ret := make([]string, len(ss))
-	m := map[string]interface{}{}
+	vv := NewValuer()
 	for i, s := range ss {
-		ret[i] = vars.EvalVarsMap(s, genFfnMap, m).Value
+		ret[i] = vars.ToString(vars.ParseExpr(s).Eval(vv))
 	}
 
 	return ret
@@ -256,10 +283,10 @@ func (a *App) parseEval(eval string) {
 		f := func(ss []string, i int64) []string {
 			seqStr := fmt.Sprintf("%d", i)
 			ret := make([]string, len(ss))
-			m := map[string]interface{}{}
+			vv := NewValuer()
 			for i, s := range ss {
 				s = strings.ReplaceAll(s, pattern, prepend+seqStr)
-				ret[i] = vars.EvalVarsMap(s, genFfnMap, m).Value
+				ret[i] = vars.ToString(vars.ParseExpr(s).Eval(vv))
 			}
 			return ret
 		}
@@ -278,10 +305,10 @@ func (a *App) parseEval(eval string) {
 			f = func(ss []string, i int64) []string {
 				seqStr := fmt.Sprintf("%0*d", width, i)
 				ret := make([]string, len(ss))
-				m := map[string]interface{}{}
+				vv := NewValuer()
 				for i, s := range ss {
 					s = strings.ReplaceAll(s, pattern, left+seqStr+right)
-					ret[i] = vars.EvalVarsMap(s, genFfnMap, m).Value
+					ret[i] = vars.ToString(vars.ParseExpr(s).Eval(vv))
 				}
 				return ret
 			}
@@ -326,7 +353,7 @@ func (a *App) thinking() {
 	if a.thinkMax == a.thinkMin {
 		thinkTime = a.thinkMin
 	} else {
-		thinkTime = time.Duration(CryptoRandInt(int64(a.thinkMax-a.thinkMin))) + a.thinkMin
+		thinkTime = time.Duration(randx.Int64Between(int64(a.thinkMin), int64(a.thinkMax)))
 	}
 
 	a.responsePrinter("think " + thinkTime.String() + "...")
@@ -691,7 +718,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 						return errStopped
 					}
 
-					if CryptoRandInt(10) != 0 {
+					if randx.Int64N(10) != 0 {
 						return nil
 					}
 
@@ -793,7 +820,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 	)
 
 	if imageSize == "" {
-		size = (CryptoRandInt(4) + 1) << 20 //  << 20 means MiB
+		size = (randx.Int64N(4) + 1) << 20 //  << 20 means MiB
 	} else {
 		if size, err = units.FromHumanSize(a.fixedImgSize); err != nil {
 			log.Fatal("error fixedImgSize ", err.Error())
@@ -823,7 +850,7 @@ func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, conten
 func (a *App) client(barIncr func(), requestsChan chan int, resultChan chan requestResult, conf *Conf, req int) {
 	urlIndex := -1
 	if len(conf.urls) > 0 {
-		urlIndex = int(CryptoRandInt(int64(len(conf.urls))))
+		urlIndex = randx.IntN(len(conf.urls))
 	}
 
 	i := 0
@@ -1097,9 +1124,9 @@ func (a *App) isOK(resp *fasthttp.Response) bool {
 		return false
 	}
 
-	vars := a.cond.Vars()
-	parameters := make(map[string]interface{}, len(vars))
-	for _, v := range vars {
+	condVars := a.cond.Vars()
+	parameters := make(map[string]interface{}, len(condVars))
+	for _, v := range condVars {
 		jsonValue := jj.GetBytes(body, v)
 		parameters[v] = jsonValue.Value()
 	}
@@ -1743,31 +1770,15 @@ func fixUrl(baseUrl, s string) string {
 	return v
 }
 
-var genFfnMap = map[string]func() vars.GenFn{
-	"uuid": func() vars.GenFn {
-		return func() interface{} { return uuid.NewV4().String() }
-	},
-	"random_string": func() vars.GenFn {
-		return func() interface{} { return rand.String(100) }
-	},
-	// generate once, use later
-	"random_string_0": func() vars.GenFn {
-		s := rand.String(100)
-		return func() interface{} { return s }
-	},
-
-	"姓名":   func() vars.GenFn { return func() interface{} { return chinaid.Name() } },
-	"性别":   func() vars.GenFn { return func() interface{} { return chinaid.Sex() } },
-	"地址":   func() vars.GenFn { return func() interface{} { return chinaid.Address() } },
-	"手机":   func() vars.GenFn { return func() interface{} { return chinaid.Mobile() } },
-	"身份证":  func() vars.GenFn { return func() interface{} { return chinaid.ChinaID() } },
-	"发证机关": func() vars.GenFn { return func() interface{} { return chinaid.IssueOrg() } },
-	"邮箱":   func() vars.GenFn { return func() interface{} { return chinaid.Email() } },
-	"银行卡":  func() vars.GenFn { return func() interface{} { return chinaid.BankNo() } },
-	"now":  func() vars.GenFn { return func() interface{} { return time.Now().Format(time.RFC3339Nano) } },
-}
-
-func CryptoRandInt(n int64) int64 {
-	result, _ := crand.Int(crand.Reader, big.NewInt(n))
-	return result.Int64()
+func init() {
+	jj.DefaultGen.RegisterFn("XX", func(args string) interface{} { return chinaid.RandChinese(2, 3) })
+	jj.DefaultGen.RegisterFn("姓名", func(args string) interface{} { return chinaid.Name() })
+	jj.DefaultGen.RegisterFn("性别", func(args string) interface{} { return chinaid.Sex() })
+	jj.DefaultGen.RegisterFn("地址", func(args string) interface{} { return chinaid.Address() })
+	jj.DefaultGen.RegisterFn("手机", func(args string) interface{} { return chinaid.Mobile() })
+	jj.DefaultGen.RegisterFn("身份证", func(args string) interface{} { return chinaid.ChinaID() })
+	jj.DefaultGen.RegisterFn("发证机关", func(args string) interface{} { return chinaid.IssueOrg() })
+	jj.DefaultGen.RegisterFn("邮箱", func(args string) interface{} { return chinaid.Email() })
+	jj.DefaultGen.RegisterFn("银行卡", func(args string) interface{} { return chinaid.BankNo() })
+	jj.DefaultGen.RegisterFn("now", func(args string) interface{} { return time.Now().Format(time.RFC3339Nano) })
 }
