@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
-	github.com/bingoohuang/gg v0.0.0-20210607102930-5eff6354fadf
+	github.com/bingoohuang/gg v0.0.0-20210607151359-89984ac61d46
 	github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da
 	github.com/bingoohuang/jj v0.0.0-20210607071322-1fd57412ffe9
 	github.com/cheggaaa/pb/v3 v3.0.7
