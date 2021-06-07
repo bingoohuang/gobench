@@ -19,7 +19,6 @@ github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a/go.mod h1:l
 github.com/averagesecurityguy/random v0.0.0-20180326012618-37cce341d2af/go.mod h1:xlqW8P0gOqVMB8Kp0mMuUznEi1PzjF+mhHTSC+ymalU=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
-github.com/bingoohuang/gg v0.0.0-20210607070552-317f8c1bff12/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
 github.com/bingoohuang/gg v0.0.0-20210607151359-89984ac61d46 h1:J1R9GVtGCyYQPtl3Qw7veH3BJ3NuzIjWtVeyZq5LcvA=
 github.com/bingoohuang/gg v0.0.0-20210607151359-89984ac61d46/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
 github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da h1:dFfvhjt9bhse3nugSi3o6oHEniyi+LulFrt9FN1OIXs=
@@ -27,8 +26,8 @@ github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da/go.mod h1
 github.com/bingoohuang/gonet v0.0.0-20190716021716-fd516efe8b31/go.mod h1:lSe5gMXAiQESg/xTshM6sByKvDkMGdDffZSXt0d64JI=
 github.com/bingoohuang/goreflect v0.0.0-20200220033105-a0faf449f649/go.mod h1:Jkc9aAuGnMb+GnhLEVtdDnyIZ6Lh6APIITuY+X0HQRU=
 github.com/bingoohuang/gou v0.0.0-20200225004418-9b3655665c46/go.mod h1:lfM/iBkZzlmnl23C+mpqiXAgC6npikzZkKVfNAdC+o4=
-github.com/bingoohuang/jj v0.0.0-20210607071322-1fd57412ffe9 h1:xE3F0UgYiAXhskEMn3GFOCZl8BKJpChlM6AbYHYrSJA=
-github.com/bingoohuang/jj v0.0.0-20210607071322-1fd57412ffe9/go.mod h1:b4mZ8re/tyziq4rzN7jWoo8bkP3cmKNZ8m2DaS6NSRk=
+github.com/bingoohuang/jj v0.0.0-20210607153037-3f38632a6274 h1:nR3ehPbPD9YtbxP2LKU/tZrOWwPyzC+G5yTq7oXjZJE=
+github.com/bingoohuang/jj v0.0.0-20210607153037-3f38632a6274/go.mod h1:BxQuCJTWkwCCKzfWgLBxiPsRhH0N3IGA2CSUxoU/350=
 github.com/bingoohuang/strcase v0.0.0-20190707081139-fae4a99e1218/go.mod h1:WYrcjWhT2QgbWZcYzfYqWxaxut2hPFa6if/zYwEEEio=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
