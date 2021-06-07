@@ -26,8 +26,8 @@ github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da/go.mod h1
 github.com/bingoohuang/gonet v0.0.0-20190716021716-fd516efe8b31/go.mod h1:lSe5gMXAiQESg/xTshM6sByKvDkMGdDffZSXt0d64JI=
 github.com/bingoohuang/goreflect v0.0.0-20200220033105-a0faf449f649/go.mod h1:Jkc9aAuGnMb+GnhLEVtdDnyIZ6Lh6APIITuY+X0HQRU=
 github.com/bingoohuang/gou v0.0.0-20200225004418-9b3655665c46/go.mod h1:lfM/iBkZzlmnl23C+mpqiXAgC6npikzZkKVfNAdC+o4=
-github.com/bingoohuang/jj v0.0.0-20210607153037-3f38632a6274 h1:nR3ehPbPD9YtbxP2LKU/tZrOWwPyzC+G5yTq7oXjZJE=
-github.com/bingoohuang/jj v0.0.0-20210607153037-3f38632a6274/go.mod h1:BxQuCJTWkwCCKzfWgLBxiPsRhH0N3IGA2CSUxoU/350=
+github.com/bingoohuang/jj v0.0.0-20210607160748-3bb7e8e458a3 h1:bRRgspTlhU5bVIl/aAov39r9DaL9YuOhRdUcPTFU/ZQ=
+github.com/bingoohuang/jj v0.0.0-20210607160748-3bb7e8e458a3/go.mod h1:BxQuCJTWkwCCKzfWgLBxiPsRhH0N3IGA2CSUxoU/350=
 github.com/bingoohuang/strcase v0.0.0-20190707081139-fae4a99e1218/go.mod h1:WYrcjWhT2QgbWZcYzfYqWxaxut2hPFa6if/zYwEEEio=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=

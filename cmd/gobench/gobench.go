@@ -231,13 +231,17 @@ func NewValuer() *Valuer {
 	}
 }
 
+func (v *Valuer) Register(fn string, f jj.SubstitutionFn) {
+	jj.DefaultSubstituteFns.Register(fn, f)
+}
+
 func (v *Valuer) Value(name, params string) interface{} {
 	if x, ok := v.Map[name]; ok {
 		return x
 	}
 
 	if !strings.HasSuffix(name, "_keep") {
-		return jj.DefaultGen.SubstitutionFns.Value(name, params)
+		return jj.DefaultGen.Value(name, params)
 	}
 
 	name = strings.TrimSuffix(name, "_keep")
@@ -245,7 +249,7 @@ func (v *Valuer) Value(name, params string) interface{} {
 		return x
 	}
 
-	x := jj.DefaultGen.SubstitutionFns.Value(name, params)
+	x := jj.DefaultGen.Value(name, params)
 	v.Map[name] = x
 
 	return x
@@ -253,9 +257,15 @@ func (v *Valuer) Value(name, params string) interface{} {
 
 func evaluator(ss ...string) []string {
 	ret := make([]string, len(ss))
-	vv := NewValuer()
+
+	valuer := NewValuer()
+	gen := jj.NewGenContext(valuer)
 	for i, s := range ss {
-		ret[i] = vars.ToString(vars.ParseExpr(s).Eval(vv))
+		if jj.Valid(s) {
+			ret[i] = gen.Gen(s)
+		} else {
+			ret[i] = vars.ToString(vars.ParseExpr(s).Eval(valuer))
+		}
 	}
 
 	return ret
@@ -285,10 +295,15 @@ func (a *App) parseEval(eval string) {
 		f := func(ss []string, i int64) []string {
 			seqStr := fmt.Sprintf("%d", i)
 			ret := make([]string, len(ss))
-			vv := NewValuer()
+			valuer := NewValuer()
+			gen := jj.NewGenContext(valuer)
 			for i, s := range ss {
 				s = strings.ReplaceAll(s, pattern, prepend+seqStr)
-				ret[i] = vars.ToString(vars.ParseExpr(s).Eval(vv))
+				if jj.Valid(s) {
+					ret[i] = gen.Gen(s)
+				} else {
+					ret[i] = vars.ToString(vars.ParseExpr(s).Eval(valuer))
+				}
 			}
 			return ret
 		}
@@ -307,10 +322,15 @@ func (a *App) parseEval(eval string) {
 			f = func(ss []string, i int64) []string {
 				seqStr := fmt.Sprintf("%0*d", width, i)
 				ret := make([]string, len(ss))
-				vv := NewValuer()
+				valuer := NewValuer()
+				gen := jj.NewGenContext(valuer)
 				for i, s := range ss {
 					s = strings.ReplaceAll(s, pattern, left+seqStr+right)
-					ret[i] = vars.ToString(vars.ParseExpr(s).Eval(vv))
+					if jj.Valid(s) {
+						ret[i] = gen.Gen(s)
+					} else {
+						ret[i] = vars.ToString(vars.ParseExpr(s).Eval(valuer))
+					}
 				}
 				return ret
 			}
@@ -1071,7 +1091,7 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 		postData = []byte(ret[1])
 		now := Now()
 		a.responsePrinter(now + "URL: " + addr)
-		a.responsePrinter(now + "POST: " + string(postData))
+		a.responsePrinter(now + "POST: " + ret[1])
 	}
 
 	req.SetRequestURI(fixUrl("", addr))
