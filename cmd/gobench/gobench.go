@@ -51,6 +51,8 @@ import (
 	_ "net/http/pprof"
 )
 
+const versionInfo = "v1.1.0 at 2021-06-07 18:49:38"
+
 // App ...
 type App struct {
 	requests, requestsTotal, goroutines, connections                int
@@ -176,7 +178,7 @@ func (a *App) Init() {
 
 	flag.Parse()
 	if *version {
-		fmt.Println("v1.0.3 at 2021-03-24 23:04:19")
+		fmt.Println(versionInfo)
 		os.Exit(0)
 	}
 
