@@ -21,6 +21,10 @@ github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/bingoohuang/gg v0.0.0-20210607151359-89984ac61d46 h1:J1R9GVtGCyYQPtl3Qw7veH3BJ3NuzIjWtVeyZq5LcvA=
 github.com/bingoohuang/gg v0.0.0-20210607151359-89984ac61d46/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
+github.com/bingoohuang/gg v0.0.0-20210608031951-72884199b0ac h1:rotU1tlCTqRCD4oXHr/ahSF2+FSlScIZnqsEIBJjlRA=
+github.com/bingoohuang/gg v0.0.0-20210608031951-72884199b0ac/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
+github.com/bingoohuang/gg v0.0.0-20210608062935-598883ce0f94 h1:GdMwmMVUlqgl+AuHsU73TDQG03uvO8pKvsv+b9j+Nyc=
+github.com/bingoohuang/gg v0.0.0-20210608062935-598883ce0f94/go.mod h1:kKNUAtRrABOvh5ztjh9Q5qtJBkx0sxwCHBQDBgWPhbw=
 github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da h1:dFfvhjt9bhse3nugSi3o6oHEniyi+LulFrt9FN1OIXs=
 github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da/go.mod h1:zUEUlD+vTxx1oicV3hBp12SQDaYVPAGg4zIzsQoR6tc=
 github.com/bingoohuang/gonet v0.0.0-20190716021716-fd516efe8b31/go.mod h1:lSe5gMXAiQESg/xTshM6sByKvDkMGdDffZSXt0d64JI=
@@ -28,6 +32,8 @@ github.com/bingoohuang/goreflect v0.0.0-20200220033105-a0faf449f649/go.mod h1:Jk
 github.com/bingoohuang/gou v0.0.0-20200225004418-9b3655665c46/go.mod h1:lfM/iBkZzlmnl23C+mpqiXAgC6npikzZkKVfNAdC+o4=
 github.com/bingoohuang/jj v0.0.0-20210607160748-3bb7e8e458a3 h1:bRRgspTlhU5bVIl/aAov39r9DaL9YuOhRdUcPTFU/ZQ=
 github.com/bingoohuang/jj v0.0.0-20210607160748-3bb7e8e458a3/go.mod h1:BxQuCJTWkwCCKzfWgLBxiPsRhH0N3IGA2CSUxoU/350=
+github.com/bingoohuang/jj v0.0.0-20210608032314-a03ed7fb3553 h1:xMT1AwChEJqcSlw4mtMWkiyJGb4rQweQ+VsVhYKogtk=
+github.com/bingoohuang/jj v0.0.0-20210608032314-a03ed7fb3553/go.mod h1:bV9nOhOo9pY9zfWfXnzmkTRYHNKU2bIoz5asX5Xldyw=
 github.com/bingoohuang/strcase v0.0.0-20190707081139-fae4a99e1218/go.mod h1:WYrcjWhT2QgbWZcYzfYqWxaxut2hPFa6if/zYwEEEio=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
