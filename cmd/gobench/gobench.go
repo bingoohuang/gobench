@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bingoohuang/gg/pkg/badgerdb"
+	"github.com/bingoohuang/gg/pkg/bytex"
 	"github.com/bingoohuang/gg/pkg/chinaid"
 	flag "github.com/bingoohuang/gg/pkg/fla9"
 	"github.com/bingoohuang/gg/pkg/randx"
@@ -38,7 +40,7 @@ import (
 
 	"github.com/karrick/godirwalk"
 
-	"github.com/Knetic/govaluate"
+	"github.com/bingoohuang/govaluate"
 	"github.com/pkg/errors"
 	"golang.org/x/net/proxy"
 
@@ -64,6 +66,8 @@ type App struct {
 	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
 	weedMasterURL, pprof, profile, profileBaseURL, eval             string
 
+	badger string
+
 	// 返回JSON时的判断是否调用成功的表达式
 	cond *govaluate.EvaluableExpression
 
@@ -80,6 +84,8 @@ type App struct {
 	seqFn       func(s ...string) []string
 	ctx         context.Context
 	ctxCancel   context.CancelFunc
+
+	randomCh chan []byte
 }
 
 // Conf for gobench.
@@ -128,6 +134,7 @@ Options:
   -eval dd:seq     Eval dd in url/body(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
   -eval dd:seq0    Eval dd in url/body(eg. dd:seq0 will evaluated to 0-n, d00:seq will evaluated to 00-99) 
   -seq             Start sequence number for request header X-Gobench-Seq 
+  -badger          Badger DB path
 `
 
 func usageAndExit(msg string) {
@@ -175,6 +182,7 @@ func (a *App) Init() {
 	version := flag.Bool("v", false, "")
 	cpus := flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
 	argSeq := flag.Int("seq", 0, "")
+	flag.StringVar(&a.badger, "badger", "", "")
 
 	flag.Parse()
 	if *version {
@@ -464,11 +472,10 @@ func main() {
 		}()
 	}
 
-	startTime := time.Now()
 	c := app.NewConfiguration()
-	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines, startTime.Format("2006-01-02 15:04:05.000"))
 
 	app.setupWeed(&c.myClient)
+	app.setupBadgerDb()
 
 	resultChan := make(chan requestResult)
 	totalReqsChan := make(chan int)
@@ -479,6 +486,9 @@ func main() {
 
 	requestsChan := make(chan int, app.goroutines)
 	barIncr, barFinish := createBars(app, c)
+
+	startTime := time.Now()
+	fmt.Printf("Dispatching %d goroutines at %s\n", app.goroutines, startTime.Format("2006-01-02 15:04:05.000"))
 
 	for i := 0; i < app.goroutines; i++ {
 		reqs := c.requests
@@ -1084,14 +1094,21 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 	rsp = fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(rsp)
 
-	if fileName == "" {
-		// 文件上传时，不处理请求体
-		ret := a.seqFn(addr, string(postData))
-		addr = ret[0]
-		postData = []byte(ret[1])
+	if fileName == "" { // 文件上传时，不处理请求体
+		if a.randomCh != nil {
+			v := <-a.randomCh
+			addr = vars.ParseExpr(addr).Eval(vars.ValuerHandler(func(name, params string) interface{} {
+				return jj.GetBytes(v, name).String()
+			})).(string)
+		} else {
+			ret := a.seqFn(addr, string(postData))
+			addr = ret[0]
+			postData = []byte(ret[1])
+		}
+
 		now := Now()
 		a.responsePrinter(now + "URL: " + addr)
-		a.responsePrinter(now + "POST: " + ret[1])
+		a.responsePrinter(now + "POST: " + string(postData))
 	}
 
 	req.SetRequestURI(fixUrl("", addr))
@@ -1118,12 +1135,14 @@ func (a *App) checkResult(rc chan requestResult, err error, statusCode int, rsp 
 		rr.networkFailed = 1
 		resultDesc = "[X] " + err.Error()
 	case statusCode >= 200 && statusCode < 300:
-		if a.isOK(rsp) {
+		if rspBody, ok := a.isOK(rsp); ok {
 			rr.success = 1
 			resultDesc = "[√]"
 		} else {
 			rr.badFailed = 1
 			resultDesc = "[x]"
+			log.Printf("failed addr: %s", addr)
+			log.Printf("failed resp: %s", rspBody)
 		}
 	default:
 		rr.badFailed = 1
@@ -1136,30 +1155,31 @@ func (a *App) checkResult(rc chan requestResult, err error, statusCode int, rsp 
 	return rr
 }
 
-func (a *App) isOK(resp *fasthttp.Response) bool {
+func (a *App) isOK(resp *fasthttp.Response) ([]byte, bool) {
 	if a.cond == nil {
-		return true
+		return nil, true
 	}
 
 	body := resp.Body()
 	if !jj.ValidBytes(body) {
-		return false
+		return body, false
 	}
 
 	condVars := a.cond.Vars()
 	parameters := make(map[string]interface{}, len(condVars))
 	for _, v := range condVars {
-		jsonValue := jj.GetBytes(body, v)
+		v1 := strings.ReplaceAll(v, "_", ".")
+		jsonValue := jj.GetBytes(body, v1)
 		parameters[v] = jsonValue.Value()
 	}
 
 	result, err := a.cond.Evaluate(parameters)
 	if err != nil {
-		return false
+		return body, false
 	}
 
 	yes, ok := result.(bool)
-	return yes && ok
+	return body, yes && ok
 }
 
 func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
@@ -1662,6 +1682,87 @@ func (a *App) processProfile(c *Conf) {
 	}
 
 	c.profiles = profiles
+}
+
+type msg struct {
+	t      time.Time
+	format string
+	v      []interface{}
+}
+
+type DelayLogger struct {
+	stop chan struct{}
+	msgs []msg
+}
+
+func (l *DelayLogger) Stop(format string, v ...interface{}) {
+	l.Printf(format, v...)
+	l.stop <- struct{}{}
+}
+
+func (l DelayLogger) Printf(format string, v ...interface{}) {
+	l.msgs = append(l.msgs, msg{t: time.Now(), format: format, v: v})
+}
+
+func NewDelayLogger(expire time.Duration) *DelayLogger {
+	d := &DelayLogger{stop: make(chan struct{})}
+	go func() {
+		select {
+		case <-time.After(expire):
+			for _, m := range d.msgs {
+				v := append([]interface{}{m.t.Format(time.RFC3339)}, m.v...)
+				log.Printf("real time %s, "+m.format, v...)
+			}
+			return
+		case <-d.stop:
+			return
+		}
+	}()
+
+	return d
+}
+
+func (a *App) setupBadgerDb() {
+	path := a.badger
+	if path == "" {
+		return
+	}
+
+	maxStr := regexp.MustCompile(`:\d+$`).FindString(path)
+	max := int64(600000000)
+	if maxStr != "" {
+		max = ss.ParseInt64(maxStr[1:])
+		path = path[:len(path)-len(maxStr)]
+	}
+
+	// maybe open badger cost more than 1 min for large data like 6亿, so log it
+	delayLogger := NewDelayLogger(3 * time.Second)
+	delayLogger.Printf("openning badger %s", path)
+	db, err := badgerdb.Open(badgerdb.WithPath(path))
+	if err != nil {
+		panic(err)
+	}
+	delayLogger.Stop("openned badger %s", path)
+
+	a.randomCh = make(chan []byte, 1000)
+	go func() {
+		defer db.Close()
+
+		for a.ctx.Err() == nil {
+			n := bytex.FromUint64(randx.Uint64N(max))
+			db.Walk(func(k, v []byte) error {
+				if v[0] != '{' {
+					v, _ = jj.SetBytes([]byte(`{"v":""}`), "v", v)
+				}
+				select {
+				case a.randomCh <- v:
+				default:
+					return io.EOF
+				}
+				return nil
+			}, badgerdb.WithStart(n))
+		}
+	}()
 }
 
 type Profile struct {

@@ -3,9 +3,9 @@ module github.com/bingoohuang/http-upload-benchmark
 go 1.16
 
 require (
-	github.com/Knetic/govaluate v3.0.0+incompatible
-	github.com/bingoohuang/gg v0.0.0-20210608062935-598883ce0f94
+	github.com/bingoohuang/gg v0.0.0-20210610081559-e7ce01bc1001
 	github.com/bingoohuang/golang-trial v0.0.0-20210315044348-58fcdd21d9da
+	github.com/bingoohuang/govaluate v0.0.0-20210111135141-03105d581340
 	github.com/bingoohuang/jj v0.0.0-20210608032314-a03ed7fb3553
 	github.com/cheggaaa/pb/v3 v3.0.7
 	github.com/docker/go-units v0.4.0
