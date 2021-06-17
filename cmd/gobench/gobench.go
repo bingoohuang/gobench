@@ -13,6 +13,7 @@ import (
 	"github.com/bingoohuang/gg/pkg/randx"
 	"github.com/bingoohuang/gg/pkg/rest"
 	"github.com/bingoohuang/gg/pkg/ss"
+	"github.com/bingoohuang/gg/pkg/thinktime"
 	"github.com/bingoohuang/gg/pkg/vars"
 	"github.com/bingoohuang/jj"
 	"github.com/cheggaaa/pb/v3"
@@ -61,7 +62,8 @@ type App struct {
 	method, duration, urls, postData, uFilePath                     string
 	keepAlive                                                       bool
 	uploadRandImg, printResult                                      string
-	timeout, thinkMin, thinkMax                                     time.Duration
+	timeout                                                         time.Duration
+	thinkTime                                                       *thinktime.ThinkTime
 	rThroughput, wThroughput                                        uint64
 	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
 	weedMasterURL, pprof, profile, profileBaseURL, eval             string
@@ -375,19 +377,13 @@ func (a *App) parseCond(cond string) {
 }
 
 func (a *App) thinking() {
-	if a.thinkMax == 0 {
+	if a.thinkTime != nil {
 		return
 	}
 
-	var thinkTime time.Duration
-	if a.thinkMax == a.thinkMin {
-		thinkTime = a.thinkMin
-	} else {
-		thinkTime = time.Duration(randx.Int64Between(int64(a.thinkMin), int64(a.thinkMax)))
-	}
-
-	a.responsePrinter("think " + thinkTime.String() + "...")
-	ticker := time.NewTicker(thinkTime)
+	think := a.thinkTime.Think(false)
+	a.responsePrinter("think " + think.String() + "...")
+	ticker := time.NewTicker(think)
 	defer ticker.Stop()
 
 	select {
@@ -397,56 +393,8 @@ func (a *App) thinking() {
 }
 
 func (a *App) parseThinkTime() (err error) {
-	if a.think == "" {
-		return nil
-	}
-
-	rangePos := strings.Index(a.think, "-")
-	if rangePos < 0 {
-		if a.thinkMin, err = time.ParseDuration(a.think); err != nil {
-			return err
-		}
-
-		a.thinkMax = a.thinkMin
-		return
-	}
-
-	min := a.think[0:rangePos]
-	max := a.think[rangePos+1:]
-	if a.thinkMax, err = time.ParseDuration(max); err != nil {
-		return err
-	}
-
-	if min == "" {
-		a.thinkMin = 0
-		return
-	}
-
-	if regexp.MustCompile(`^\d+$`).MatchString(min) {
-		min += findUnit(max)
-	}
-
-	if a.thinkMin, err = time.ParseDuration(min); err != nil {
-		return err
-	}
-
-	if a.thinkMin > a.thinkMax {
-		return errors.Errorf("min think time should be less than max")
-	}
-
-	return nil
-}
-
-func findUnit(s string) string {
-	pos := strings.LastIndexFunc(s, func(r rune) bool {
-		return r >= '0' && r <= '9'
-	})
-
-	if pos < 0 {
-		return s
-	}
-
-	return s[pos+1:]
+	a.thinkTime, err = thinktime.ParseThinkTime(a.think)
+	return err
 }
 
 func main() {
