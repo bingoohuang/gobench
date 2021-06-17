@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"github.com/bingoohuang/gg/pkg/badgerdb"
 	"github.com/bingoohuang/gg/pkg/bytex"
-	"github.com/bingoohuang/gg/pkg/chinaid"
+	"github.com/bingoohuang/gg/pkg/filex"
 	flag "github.com/bingoohuang/gg/pkg/fla9"
+	"github.com/bingoohuang/gg/pkg/netx"
+	"github.com/bingoohuang/gg/pkg/osx"
 	"github.com/bingoohuang/gg/pkg/randx"
 	"github.com/bingoohuang/gg/pkg/rest"
 	"github.com/bingoohuang/gg/pkg/ss"
@@ -27,7 +29,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -41,12 +42,10 @@ import (
 
 	"github.com/karrick/godirwalk"
 
-	"github.com/bingoohuang/govaluate"
-	"github.com/pkg/errors"
-	"golang.org/x/net/proxy"
-
 	"github.com/bingoohuang/golang-trial/randimg"
+	"github.com/bingoohuang/govaluate"
 	"github.com/dustin/go-humanize"
+	"github.com/pkg/errors"
 
 	"github.com/valyala/fasthttp"
 
@@ -58,13 +57,14 @@ const versionInfo = "v1.1.0 at 2021-06-07 18:49:38"
 
 // App ...
 type App struct {
-	requests, requestsTotal, goroutines, connections                int
-	method, duration, urls, postData, uFilePath                     string
-	keepAlive                                                       bool
-	uploadRandImg, printResult                                      string
-	timeout                                                         time.Duration
-	thinkTime                                                       *thinktime.ThinkTime
-	rThroughput, wThroughput                                        uint64
+	requests, requestsTotal, goroutines, connections int
+	method, duration, urls, postData, uFilePath      string
+	keepAlive                                        bool
+	uploadRandImg, printResult                       string
+
+	timeout                  time.Duration
+	rThroughput, wThroughput uint64
+
 	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
 	weedMasterURL, pprof, profile, profileBaseURL, eval             string
 
@@ -87,7 +87,8 @@ type App struct {
 	ctx         context.Context
 	ctxCancel   context.CancelFunc
 
-	randomCh chan []byte
+	randomCh  chan []byte
+	thinkTime *thinktime.ThinkTime
 }
 
 // Conf for gobench.
@@ -377,7 +378,7 @@ func (a *App) parseCond(cond string) {
 }
 
 func (a *App) thinking() {
-	if a.thinkTime != nil {
+	if a.thinkTime == nil {
 		return
 	}
 
@@ -615,10 +616,9 @@ func (a *App) processUrls(c *Conf) {
 	if strings.Index(a.urls, "@") == 0 {
 		var err error
 
-		urlsFilePath := a.urls[1:]
-		c.urls, err = FileToLines(urlsFilePath)
+		c.urls, err = filex.Lines(a.urls[1:])
 		if err != nil {
-			log.Fatalf("Error in ioutil.ReadFile for file: %s Error: %v", urlsFilePath, err)
+			log.Fatalf("Error in ioutil.ReadFile for file: %s Error: %v", a.urls[1:], err)
 		}
 	} else {
 		c.urls = strings.Split(a.urls, "#")
@@ -627,18 +627,6 @@ func (a *App) processUrls(c *Conf) {
 	for i, u := range c.urls {
 		c.urls[i] = fixUrl("", u)
 	}
-}
-
-func expand(path string) string {
-	if len(path) == 0 || path[0] != '~' {
-		return path
-	}
-
-	usr, err := user.Current()
-	if err != nil {
-		return path
-	}
-	return filepath.Join(usr.HomeDir, path[1:])
 }
 
 func IfExit(ch chan bool) bool {
@@ -654,7 +642,7 @@ func (a *App) dealUploadFilePath(c *Conf) {
 	if a.uFilePath == "" {
 		return
 	}
-	a.uFilePath = expand(a.uFilePath)
+	a.uFilePath = osx.ExpandHome(a.uFilePath)
 	fs, err := os.Stat(a.uFilePath)
 	if err != nil && os.IsNotExist(err) {
 		log.Fatalf("%s dos not exist", a.uFilePath)
@@ -1061,7 +1049,7 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 
 	req.SetRequestURI(fixUrl("", addr))
 	req.Header.SetMethod(method)
-	SetHeader(req, "Connection", IfElse(cnf.keepAlive, "keep-alive", "close"))
+	SetHeader(req, "Connection", ss.If(cnf.keepAlive, "keep-alive", "close"))
 	SetHeader(req, "Authorization", cnf.authHeader)
 	SetHeader(req, "Content-Type", contentType)
 	SetGobenchHeaders(req)
@@ -1157,9 +1145,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 	a.responsePrinter(r)
 }
 
-func Now() string {
-	return time.Now().Format(`2006-01-02 15:04:05.000 `)
-}
+func Now() string { return time.Now().Format(`2006-01-02 15:04:05.000 `) }
 
 // SetHeader set request header if value is not empty.
 func SetHeader(r *fasthttp.Request, header, value string) {
@@ -1168,34 +1154,10 @@ func SetHeader(r *fasthttp.Request, header, value string) {
 	}
 }
 
-// MyConn for net connection.
-type MyConn struct {
-	net.Conn
-	app *App
-}
-
-// Read bytes from net connection.
-func (myConn *MyConn) Read(b []byte) (n int, err error) {
-	if n, err = myConn.Conn.Read(b); err == nil {
-		atomic.AddUint64(&myConn.app.rThroughput, uint64(n))
-	}
-
-	return
-}
-
-// Write bytes to net.
-func (myConn *MyConn) Write(b []byte) (n int, err error) {
-	if n, err = myConn.Conn.Write(b); err == nil {
-		atomic.AddUint64(&myConn.app.wThroughput, uint64(n))
-	}
-
-	return
-}
-
 // MyDialer create Dial function.
 func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 	return func(address string) (net.Conn, error) {
-		dialer, err := NewProxyConn(a.proxy)
+		dialer, err := netx.NewProxyDialer(a.proxy)
 		if err != nil {
 			return nil, err
 		}
@@ -1205,7 +1167,7 @@ func (a *App) MyDialer() func(address string) (conn net.Conn, err error) {
 			return nil, err
 		}
 
-		return &MyConn{Conn: conn, app: a}, nil
+		return netx.NewStatConnReadWrite(conn, &a.rThroughput, &a.wThroughput), nil
 	}
 }
 
@@ -1377,41 +1339,6 @@ func (a *App) assignFids(c *fasthttp.Client) {
 	}
 }
 
-// IfElse return then if condition is true,  else els if false.
-func IfElse(condition bool, then, els string) string {
-	if condition {
-		return then
-	}
-
-	return els
-}
-
-// FileToLines read file into lines.
-func FileToLines(filePath string) (lines []string, err error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-
-	return lines, scanner.Err()
-}
-
-// MustOpen open file successfully or panic.
-func MustOpen(f string) *os.File {
-	r, err := os.Open(f)
-	if err != nil {
-		panic(err)
-	}
-
-	return r
-}
-
 // ReadUploadMultipartFile read file filePath for upload in multipart,
 // return multipart content, form data content type and error.
 func ReadUploadMultipartFile(fieldName, filePath string) (imageBytes []byte, contentType string, err error) {
@@ -1423,139 +1350,13 @@ func ReadUploadMultipartFile(fieldName, filePath string) (imageBytes []byte, con
 		return nil, "", err
 	}
 
-	file := MustOpen(filePath)
+	file := filex.Open(filePath)
 	defer file.Close()
 
 	_, _ = io.Copy(part, file)
 	_ = writer.Close()
 
 	return buffer.Bytes(), writer.FormDataContentType(), nil
-}
-
-// Throttle ...
-type Throttle struct {
-	tokenC, stopC chan bool
-}
-
-// MakeThrottle ...
-func MakeThrottle(duration time.Duration) *Throttle {
-	t := &Throttle{tokenC: make(chan bool, 1), stopC: make(chan bool, 1)}
-
-	go func() {
-		ticker := time.NewTicker(duration)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-t.stopC:
-				return
-			case <-ticker.C:
-				select {
-				case t.tokenC <- true:
-				default:
-				}
-			}
-		}
-	}()
-
-	return t
-}
-
-// Stop ...
-func (t *Throttle) Stop() { t.stopC <- true }
-
-// Allow ...
-func (t *Throttle) Allow() bool {
-	select {
-	case <-t.tokenC:
-		return true
-	default:
-		return false
-	}
-}
-
-// NewProxyConn based on proxy url.
-func NewProxyConn(proxyUrl string) (ProxyConn, error) {
-	u, err := url.Parse(proxyUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	switch u.Scheme {
-	case "socks5":
-		return &Socks5Client{proxyUrl: u}, nil
-	case "http":
-		return &HttpClient{proxyUrl: u}, nil
-	default:
-		return &DefaultClient{}, nil
-	}
-}
-
-// ProxyConn is used to define the proxy.
-type ProxyConn interface {
-	Dial(network string, address string) (net.Conn, error)
-}
-
-// DefaultClient is used to implement a proxy in default.
-type DefaultClient struct {
-	rAddr *net.TCPAddr
-}
-
-// Dial implementation of ProxyConn.
-// Set KeepAlive=-1 to reduce the call of syscall.
-func (dc *DefaultClient) Dial(network string, address string) (conn net.Conn, err error) {
-	if dc.rAddr == nil {
-		if dc.rAddr, err = net.ResolveTCPAddr("tcp", address); err != nil {
-			return nil, err
-		}
-	}
-	return net.DialTCP(network, nil, dc.rAddr)
-}
-
-// Socks5Client is used to implement a proxy in socks5
-type Socks5Client struct {
-	proxyUrl *url.URL
-}
-
-// Dial implementation of ProxyConn.
-func (s5 *Socks5Client) Dial(network string, address string) (net.Conn, error) {
-	d, err := proxy.FromURL(s5.proxyUrl, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return d.Dial(network, address)
-}
-
-// HttpClient is used to implement a proxy in http.
-type HttpClient struct {
-	proxyUrl *url.URL
-}
-
-// Dial implementation of ProxyConn
-func (hc *HttpClient) Dial(_ string, address string) (net.Conn, error) {
-	req, err := http.NewRequest("CONNECT", "http://"+address, nil)
-	if err != nil {
-		return nil, err
-	}
-	password, _ := hc.proxyUrl.User.Password()
-	req.SetBasicAuth(hc.proxyUrl.User.Username(), password)
-	proxyConn, err := net.Dial("tcp", hc.proxyUrl.Host)
-	if err != nil {
-		return nil, err
-	}
-	if err := req.Write(proxyConn); err != nil {
-		return nil, err
-	}
-	res, err := http.ReadResponse(bufio.NewReader(proxyConn), req)
-	if err != nil {
-		return nil, err
-	}
-	_ = res.Body.Close()
-	if res.StatusCode != 200 {
-		return nil, errors.New("Proxy error " + res.Status)
-	}
-	return proxyConn, nil
 }
 
 func CreateUri(baseUri, relativeUri string, query map[string]string) (string, error) {
@@ -1842,14 +1643,5 @@ func fixUrl(baseUrl, s string) string {
 }
 
 func init() {
-	jj.DefaultGen.RegisterFn("XX", func(args string) interface{} { return chinaid.RandChinese(2, 3) })
-	jj.DefaultGen.RegisterFn("姓名", func(args string) interface{} { return chinaid.Name() })
-	jj.DefaultGen.RegisterFn("性别", func(args string) interface{} { return chinaid.Sex() })
-	jj.DefaultGen.RegisterFn("地址", func(args string) interface{} { return chinaid.Address() })
-	jj.DefaultGen.RegisterFn("手机", func(args string) interface{} { return chinaid.Mobile() })
-	jj.DefaultGen.RegisterFn("身份证", func(args string) interface{} { return chinaid.ChinaID() })
-	jj.DefaultGen.RegisterFn("发证机关", func(args string) interface{} { return chinaid.IssueOrg() })
-	jj.DefaultGen.RegisterFn("邮箱", func(args string) interface{} { return chinaid.Email() })
-	jj.DefaultGen.RegisterFn("银行卡", func(args string) interface{} { return chinaid.BankNo() })
 	jj.DefaultGen.RegisterFn("now", func(args string) interface{} { return time.Now().Format(time.RFC3339Nano) })
 }
