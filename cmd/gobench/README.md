@@ -1,12 +1,11 @@
 1. 类似的压力测试工具
+    - [httpfuzz is a fast HTTP fuzzer written in Go inspired by Burp Intruder](https://github.com/JonCooperWorks/httpfuzz)
     - [A high-performance HTTP benchmarking tool with real-time web UI and terminal displaying](https://github.com/six-ddc/plow)
     - [codesenberg/bombardier](https://github.com/codesenberg/bombardier)
     - [denji/awesome-http-benchmark](https://github.com/denji/awesome-http-benchmark)
     - [Modern cross-platform HTTP load-testing tool written in Go](https://github.com/rogerwelin/cassowary)
     - [go wrk](https://github.com/adjust/go-wrk)
     - [httpit](https://github.com/gonetx/httpit)
-
-
 
 1. 随机读取es性能测试
 
