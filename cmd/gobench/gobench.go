@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/bingoohuang/gg/pkg/badgerdb"
@@ -65,8 +66,8 @@ type App struct {
 	timeout                  time.Duration
 	rThroughput, wThroughput uint64
 
-	authHeader, uFieldName, fixedImgSize, contentType, think, proxy string
-	weedMasterURL, pprof, profile, profileBaseURL, eval             string
+	basic, uFieldName, fixedImgSize, contentType, think, proxy string
+	weedMasterURL, pprof, profile, profileBaseURL, eval        string
 
 	badger string
 
@@ -93,12 +94,12 @@ type App struct {
 
 // Conf for gobench.
 type Conf struct {
-	urls                            []string
-	postData                        []byte
-	requests, firstRequests         int
-	duration                        time.Duration
-	keepAlive                       bool
-	method, authHeader, contentType string
+	urls                           []string
+	postData                       []byte
+	requests, firstRequests        int
+	duration                       time.Duration
+	keepAlive                      bool
+	method, basicAuth, contentType string
 
 	myClient        fasthttp.Client
 	postFileChannel chan string
@@ -120,7 +121,7 @@ Options:
   -proxy           Proxy url, like socks5://127.0.0.1:1080, http://127.0.0.1:1080
   -P               POST data, use @a.json for a file
   -c.type          Content-Type, eg, json, plain, or other full name
-  -auth            Authorization header
+  -basic           Basic Auth, username:password
   -k               HTTP keep-alive (default true)
   -ok              Condition like 'status == 200' for json output
   -image           Upload random images, png/jpg
@@ -173,7 +174,7 @@ func (a *App) Init() {
 	flag.StringVar(&a.fixedImgSize, "i.size", "", "")
 	flag.StringVar(&a.method, "X", "", "")
 	flag.DurationVar(&a.timeout, "timeout", 5*time.Second, "")
-	flag.StringVar(&a.authHeader, "auth", "", "")
+	flag.StringVar(&a.basic, "basic", "", "")
 	flag.StringVar(&a.contentType, "c.type", "", "")
 	flag.StringVar(&a.proxy, "proxy", "", "")
 	flag.StringVar(&a.think, "think", "", "")
@@ -579,11 +580,11 @@ func (a *App) NewConfiguration() (c *Conf) {
 	}
 
 	c = &Conf{
-		urls:       make([]string, 0),
-		postData:   nil,
-		keepAlive:  a.keepAlive,
-		requests:   a.requests,
-		authHeader: a.authHeader,
+		urls:      make([]string, 0),
+		postData:  nil,
+		keepAlive: a.keepAlive,
+		requests:  a.requests,
+		basicAuth: a.basic,
 	}
 
 	if a.method != "" {
@@ -1030,27 +1031,33 @@ func (a *App) exec(rc chan requestResult, cnf *Conf, addr string, method string,
 	rsp = fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(rsp)
 
-	if fileName == "" { // 文件上传时，不处理请求体
-		if a.randomCh != nil {
-			v := <-a.randomCh
-			addr = vars.ParseExpr(addr).Eval(vars.ValuerHandler(func(name, params string) interface{} {
-				return jj.GetBytes(v, name).String()
-			})).(string)
-		} else {
+	if a.randomCh != nil {
+		v := <-a.randomCh
+		addr = vars.ParseExpr(addr).Eval(vars.ValuerHandler(func(name, params string) interface{} {
+			return jj.GetBytes(v, name).String()
+		})).(string)
+	} else {
+		if fileName == "" { // 文件上传时，不处理请求体
 			ret := a.seqFn(addr, string(postData))
 			addr = ret[0]
 			postData = []byte(ret[1])
+		} else {
+			addr = a.seqFn(addr)[0]
 		}
+	}
 
-		now := Now()
-		a.responsePrinter(now + "URL: " + addr)
+	now := Now()
+	a.responsePrinter(now + "URL: " + addr)
+	if fileName == "" {
 		a.responsePrinter(now + "POST: " + string(postData))
 	}
 
 	req.SetRequestURI(fixUrl("", addr))
 	req.Header.SetMethod(method)
 	SetHeader(req, "Connection", ss.If(cnf.keepAlive, "keep-alive", "close"))
-	SetHeader(req, "Authorization", cnf.authHeader)
+	if cnf.basicAuth != "" {
+		SetHeader(req, "Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(cnf.basicAuth)))
+	}
 	SetHeader(req, "Content-Type", contentType)
 	SetGobenchHeaders(req)
 
