@@ -136,7 +136,7 @@ Options:
   -pprof           Profile pprof address, like :6060
   -body[:cond]     A filename to save response body, with an optional jj expression to filter body when saving, like person.name, see github.com/bingoohuang/jj
   -eval dd:seq     Eval dd in url/body(eg. dd:seq will evaluated to dd0-n, d00:seq will evaluated to d00-d99) 
-  -eval dd:seq0    Eval dd in url/body(eg. dd:seq0 will evaluated to 0-n, d00:seq will evaluated to 00-99) 
+  -eval dd:seq0    Eval dd in url/body(eg. dd:seq0 will evaluated to 0-n, d00:seq0 will evaluated to 00-99) 
   -seq             Start sequence number for request header X-Gobench-Seq 
   -badger          Badger DB path
 `
@@ -319,9 +319,9 @@ func (a *App) parseEval(eval string) {
 			}
 			return ret
 		}
-		start, max := int64(0), int64(0)
+		start, max := int64(SecCur()), int64(0)
 		if len(loc) > 0 {
-			start, _ = strconv.ParseInt(pattern[loc[0]:loc[1]], 10, 64)
+			//start, _ = strconv.ParseInt(pattern[loc[0]:loc[1]], 10, 64)
 			width := loc[1] - loc[0]
 			max = 1
 			for i := 0; i < width; i++ {
