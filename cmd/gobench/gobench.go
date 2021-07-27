@@ -108,7 +108,7 @@ type Conf struct {
 
 const usage = `Usage: gobench [options...] url1[,url2...]
 Options:
-  -l               URL list (# separated), or @URL's file path (line separated)
+  -l               URL list (# separated), or file (url lines)
   -X               HTTP method(GET, POST, PUT, DELETE, HEAD, OPTIONS and etc)
   -c               Number of connections (default 100)
   -n               Number of total requests
@@ -614,12 +614,11 @@ func (a *App) processUrls(c *Conf) {
 		usageAndExit("url/weed/profile required!")
 	}
 
-	if strings.Index(a.urls, "@") == 0 {
+	if FileExist(a.urls) {
 		var err error
-
-		c.urls, err = filex.Lines(a.urls[1:])
+		c.urls, err = filex.Lines(a.urls)
 		if err != nil {
-			log.Fatalf("Error in ioutil.ReadFile for file: %s Error: %v", a.urls[1:], err)
+			log.Fatalf("Error in ioutil.ReadFile for file: %s Error: %v", a.urls, err)
 		}
 	} else {
 		c.urls = strings.Split(a.urls, "#")
@@ -637,6 +636,11 @@ func IfExit(ch chan bool) bool {
 	default:
 		return false
 	}
+}
+
+func FileExist(name string) bool {
+	_, err := os.Stat(name)
+	return err == nil
 }
 
 func (a *App) dealUploadFilePath(c *Conf) {
