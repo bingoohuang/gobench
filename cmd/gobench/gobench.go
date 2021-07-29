@@ -7,20 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/bingoohuang/gg/pkg/badgerdb"
-	"github.com/bingoohuang/gg/pkg/bytex"
-	"github.com/bingoohuang/gg/pkg/filex"
-	flag "github.com/bingoohuang/gg/pkg/fla9"
-	"github.com/bingoohuang/gg/pkg/netx"
-	"github.com/bingoohuang/gg/pkg/osx"
-	"github.com/bingoohuang/gg/pkg/randx"
-	"github.com/bingoohuang/gg/pkg/rest"
-	"github.com/bingoohuang/gg/pkg/ss"
-	"github.com/bingoohuang/gg/pkg/thinktime"
-	"github.com/bingoohuang/gg/pkg/vars"
-	"github.com/bingoohuang/jj"
-	"github.com/cheggaaa/pb/v3"
-	"github.com/mitchellh/go-homedir"
 	"io"
 	"io/ioutil"
 	"log"
@@ -41,6 +27,21 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/bingoohuang/gg/pkg/badgerdb"
+	"github.com/bingoohuang/gg/pkg/bytex"
+	"github.com/bingoohuang/gg/pkg/filex"
+	flag "github.com/bingoohuang/gg/pkg/fla9"
+	"github.com/bingoohuang/gg/pkg/netx"
+	"github.com/bingoohuang/gg/pkg/osx"
+	"github.com/bingoohuang/gg/pkg/randx"
+	"github.com/bingoohuang/gg/pkg/rest"
+	"github.com/bingoohuang/gg/pkg/ss"
+	"github.com/bingoohuang/gg/pkg/thinktime"
+	"github.com/bingoohuang/gg/pkg/vars"
+	"github.com/bingoohuang/jj"
+	"github.com/cheggaaa/pb/v3"
+	"github.com/mitchellh/go-homedir"
+
 	"github.com/karrick/godirwalk"
 
 	"github.com/bingoohuang/golang-trial/randimg"
@@ -50,11 +51,12 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/docker/go-units"
 	_ "net/http/pprof"
+
+	"github.com/docker/go-units"
 )
 
-const versionInfo = "v1.1.0 at 2021-06-07 18:49:38"
+const versionInfo = "v1.1.1 at 2021-07-29 19:42:47"
 
 // App ...
 type App struct {
@@ -90,6 +92,10 @@ type App struct {
 
 	randomCh  chan []byte
 	thinkTime *thinktime.ThinkTime
+
+	tcpConnectionMapLock sync.RWMutex
+	tcpConnectionMap     map[string]bool
+	tcpConnections       int
 }
 
 // Conf for gobench.
@@ -220,6 +226,7 @@ func (a *App) Init() {
 
 	a.exitChan = make(chan bool)
 	a.waitGroup = &sync.WaitGroup{}
+	a.tcpConnectionMap = make(map[string]bool)
 	a.setupResponsePrinter()
 	a.setupBodyPrint()
 	a.parseEval(a.eval)
@@ -532,6 +539,9 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 	if !methodsStat.ShowStats(w) {
 		fmt.Fprintf(w, "Max X-Gobench-Seq:\t%d\n", SecCur())
 	}
+	a.tcpConnectionMapLock.RLock()
+	fmt.Fprintf(w, "Real Connections:\t%d\n", a.tcpConnections)
+	a.tcpConnectionMapLock.RUnlock()
 	w.Flush()
 }
 
@@ -1130,6 +1140,9 @@ func (a *App) isOK(resp *fasthttp.Response) ([]byte, bool) {
 }
 
 func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+	tcpConnection := resp.LocalAddr().String() + "->" + resp.RemoteAddr().String()
+	a.statConnections(tcpConnection)
+
 	if a.bodyPrintCh == nil && (a.responsePrinter == nil || resp == nil) {
 		return
 	}
@@ -1152,7 +1165,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 		r += "file: " + fileName + " "
 	}
 
-	r += resultDesc + " [" + strconv.Itoa(statusCode) + "] " + resp.String()
+	r += resultDesc + " [" + tcpConnection + " " + strconv.Itoa(statusCode) + "] " + resp.String()
 	a.responsePrinter(r)
 }
 
@@ -1523,6 +1536,20 @@ func (a *App) setupBadgerDb() {
 			}, badgerdb.WithStart(n))
 		}
 	}()
+}
+
+func (a *App) statConnections(tcpConnection string) {
+	a.tcpConnectionMapLock.RLock()
+	_, ok := a.tcpConnectionMap[tcpConnection]
+	a.tcpConnectionMapLock.RUnlock()
+	if ok {
+		return
+	}
+
+	a.tcpConnectionMapLock.Lock()
+	a.tcpConnectionMap[tcpConnection] = true
+	a.tcpConnections++
+	a.tcpConnectionMapLock.Unlock()
 }
 
 type Profile struct {
