@@ -1144,8 +1144,13 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 		return
 	}
 
-	tcpConnection := resp.LocalAddr().String() + "->" + resp.RemoteAddr().String()
-	a.statConnections(tcpConnection)
+	localAddr := resp.LocalAddr()
+	remoteAddr := resp.RemoteAddr()
+	tcpConnection := ""
+	if localAddr != nil && remoteAddr != nil {
+		tcpConnection = localAddr.String() + "->" + remoteAddr.String()
+		a.statConnections(tcpConnection)
+	}
 
 	if a.bodyPrintCh == nil && a.responsePrinter == nil {
 		return
