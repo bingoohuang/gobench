@@ -1106,7 +1106,7 @@ func (a *App) checkResult(rc chan requestResult, err error, statusCode int, rsp 
 		resultDesc = "[x]"
 	}
 
-	a.printResponse(addr, fileName, resultDesc, statusCode, rsp)
+	a.printResponse(addr, fileName, resultDesc, statusCode, rr.networkFailed == 1, rsp)
 
 	rc <- rr
 	return rr
@@ -1139,16 +1139,14 @@ func (a *App) isOK(resp *fasthttp.Response) ([]byte, bool) {
 	return body, yes && ok
 }
 
-func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+func (a *App) printResponse(addr, fileName, resultDesc string, statusCode int, networkFailed bool, resp *fasthttp.Response) {
 	if resp == nil {
 		return
 	}
 
-	localAddr := resp.LocalAddr()
-	remoteAddr := resp.RemoteAddr()
 	tcpConnection := ""
-	if localAddr != nil && remoteAddr != nil {
-		tcpConnection = localAddr.String() + "->" + remoteAddr.String()
+	if !networkFailed {
+		tcpConnection = resp.LocalAddr().String() + "->" + resp.RemoteAddr().String()
 		a.statConnections(tcpConnection)
 	}
 
@@ -1174,7 +1172,11 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 		r += "file: " + fileName + " "
 	}
 
-	r += resultDesc + " [" + tcpConnection + " " + strconv.Itoa(statusCode) + "] " + resp.String()
+	if networkFailed {
+		r += resultDesc
+	} else {
+		r += resultDesc + " [" + tcpConnection + " " + strconv.Itoa(statusCode) + "] " + resp.String()
+	}
 	a.responsePrinter(r)
 }
 
