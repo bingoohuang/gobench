@@ -1140,10 +1140,14 @@ func (a *App) isOK(resp *fasthttp.Response) ([]byte, bool) {
 }
 
 func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode int, resp *fasthttp.Response) {
+	if resp == nil {
+		return
+	}
+
 	tcpConnection := resp.LocalAddr().String() + "->" + resp.RemoteAddr().String()
 	a.statConnections(tcpConnection)
 
-	if a.bodyPrintCh == nil && (a.responsePrinter == nil || resp == nil) {
+	if a.bodyPrintCh == nil && a.responsePrinter == nil {
 		return
 	}
 
@@ -1152,7 +1156,7 @@ func (a *App) printResponse(addr, fileName string, resultDesc string, statusCode
 		a.bodyPrintCh <- body
 	}
 
-	if a.responsePrinter == nil || resp == nil {
+	if a.responsePrinter == nil {
 		return
 	}
 
