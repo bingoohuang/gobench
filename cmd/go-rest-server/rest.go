@@ -44,8 +44,10 @@ func main() {
 	http.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK\n"))
 	})
-
 	http.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("OK\n"))
+	})
+	http.HandleFunc("/xx", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "my own error message", http.StatusInternalServerError)
 	})
 
