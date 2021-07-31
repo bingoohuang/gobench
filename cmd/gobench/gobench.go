@@ -197,6 +197,10 @@ func (a *App) Init() {
 		os.Exit(0)
 	}
 
+	if a.requestsTotal == 1 && a.printResult == "" {
+		a.printResult = "1"
+	}
+
 	seq = int32(*argSeq)
 
 	if a.weedMasterURL != "" {
@@ -756,10 +760,6 @@ func (a *App) period(c *Conf) {
 	}
 
 	c.firstRequests = a.requests
-
-	if a.requestsTotal == 1 && a.printResult == "" {
-		a.printResult = "1"
-	}
 
 	if a.requestsTotal > 0 {
 		if a.requestsTotal < a.goroutines {
