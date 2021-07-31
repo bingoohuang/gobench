@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/bingoohuang/gg/pkg/man"
 	"net/http"
 	"os"
 
-	"github.com/dustin/go-humanize"
 	"github.com/valyala/fasthttp"
 )
 
@@ -102,7 +102,7 @@ func createSampleFile() {
 		return
 	}
 
-	fixedSize, err := humanize.ParseBytes(sampleFileSize)
+	fixedSize, err := man.ParseBytes(sampleFileSize)
 	if err != nil {
 		panic(err)
 	}
@@ -118,7 +118,7 @@ func parseMaxRequestBodySize() uint64 {
 		err error
 	)
 
-	if m, err = humanize.ParseBytes(maxRequestBodySize); err != nil {
+	if m, err = man.ParseBytes(maxRequestBodySize); err != nil {
 		fmt.Println("ParseBytes", maxRequestBodySize, "error", err)
 		os.Exit(1)
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/bingoohuang/gg/pkg/man"
 	"io"
 	"io/ioutil"
 	"log"
@@ -44,19 +45,15 @@ import (
 
 	"github.com/karrick/godirwalk"
 
-	"github.com/bingoohuang/golang-trial/randimg"
 	"github.com/bingoohuang/govaluate"
-	"github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 
 	"github.com/valyala/fasthttp"
 
 	_ "net/http/pprof"
-
-	"github.com/docker/go-units"
 )
 
-const versionInfo = "v1.1.1 at 2021-07-29 19:42:47"
+const versionInfo = "v1.1.2 at 2021-08-01 00:07:38"
 
 // App ...
 type App struct {
@@ -530,9 +527,9 @@ func (a *App) printResults(startTime time.Time, totalRequests int, rr requestRes
 	}
 	fmt.Fprintf(w, "OK requests rate:\t%0.3f hits/sec\n", float64(rr.success)/elapsedSeconds)
 	fmt.Fprintf(w, "Read throughput:\t%s/sec\n",
-		humanize.IBytes(uint64(float64(a.rThroughput)/elapsedSeconds)))
+		man.IBytes(uint64(float64(a.rThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Write throughput:\t%s/sec\n",
-		humanize.IBytes(uint64(float64(a.wThroughput)/elapsedSeconds)))
+		man.IBytes(uint64(float64(a.wThroughput)/elapsedSeconds)))
 	fmt.Fprintf(w, "Test time:\t%s(%s-%s)\n", elapsed.Round(time.Millisecond).String(),
 		startTime.Format("2006-01-02 15:04:05.000"), endTime.Format("15:04:05.000"))
 
@@ -760,6 +757,10 @@ func (a *App) period(c *Conf) {
 
 	c.firstRequests = a.requests
 
+	if a.requestsTotal == 1 && a.printResult == "" {
+		a.printResult = "1"
+	}
+
 	if a.requestsTotal > 0 {
 		if a.requestsTotal < a.goroutines {
 			a.goroutines = a.requestsTotal
@@ -799,31 +800,29 @@ func (a *App) period(c *Conf) {
 func (a *App) randomImage(imageExt, imageSize string) (imageBytes []byte, contentType, imageFile string) {
 	var (
 		err  error
-		size int64
+		size uint64
 	)
 
 	if imageSize == "" {
-		size = (randx.Int64N(4) + 1) << 20 //  << 20 means MiB
+		size = (randx.Uint64N(4) + 1) << 20 //  << 20 means MiB
 	} else {
-		if size, err = units.FromHumanSize(a.fixedImgSize); err != nil {
+		if size, err = man.ParseBytes(a.fixedImgSize); err != nil {
 			log.Fatal("error fixedImgSize ", err.Error())
 		}
 	}
 
-	randText := strconv.FormatUint(randimg.RandUint64(), 10)
+	randText := strconv.FormatUint(randx.Uint64(), 10)
 	ext := ".png"
 	if imageExt != "" {
 		ext = "." + imageExt
 	}
 	imageFile = randText + ext
-	rc := randimg.RandImageConfig{
+	rc := randx.ImgConfig{
 		Width:      650,
 		Height:     350,
 		RandomText: randText,
-		FileName:   imageFile,
-		FixedSize:  size,
 	}
-	rc.GenerateFile()
+	rc.GenFile(imageFile, int(size))
 	defer os.Remove(imageFile)
 
 	imageBytes, contentType, _ = ReadUploadMultipartFile(a.uFieldName, imageFile)

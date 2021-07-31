@@ -3,12 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bingoohuang/gg/pkg/man"
 	"io"
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/dustin/go-humanize"
 )
 
 // NetHTTPUpload upload
@@ -64,7 +63,7 @@ func NetHTTPUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, uploadResult{
 		CostTime: duration.String(),
 		TempFile: tmpFile,
-		FileSize: humanize.Bytes(uint64(written)),
+		FileSize: man.Bytes(uint64(written)),
 	})
 }
 
